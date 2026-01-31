@@ -63,10 +63,16 @@ bot.onText(/\/start/, async (msg) => {
 ━━━━━━━━━━━━━━━━
 📌 *အသုံးပြုနည်း*
 ━━━━━━━━━━━━━━━━
-1️⃣ Bot ကို Discussion Group ထဲ Add ပါ  
-2️⃣ Giveaway Post ကို reply ထောက်ပြီး  
+1️⃣ Bot ကို Channel မှာ Admin ပေး 
+Discussion Group မှာလဲ Admin ပေးပါ
+
+2️⃣ Giveaway Post တင်တဲ့နေရာမှာ 
+@CommentsPickerBot ဆိုတာ ထည့်ရေးမှရ
+
+3️⃣ Giveaway Post ကို reply ထောက်ပြီး  
    \`/pickwinner\` (or) \`/pickwinner 2\`  
-3️⃣ Bot က Live UI နဲ့ Winner ရွေးပေးပါမယ်
+   
+4️⃣ Bot က Live UI နဲ့ Winner ရွေးပေးပါမယ်
 
 ━━━━━━━━━━━━━━━━
 ⚠️ *သတိပြုရန်*
