@@ -11,7 +11,7 @@
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
 const mongoose = require("mongoose");
-
+const app = express();
 app.get("/", (req, res) => {
   res.status(200).send("OK");
 });
@@ -31,7 +31,8 @@ if (!BOT_TOKEN || !MONGO_URI || !PUBLIC_URL || !OWNER_ID) {
 
 // ===== BOT & SERVER =====
 const bot = new TelegramBot(BOT_TOKEN);
-const app = express();
+
+/////// /start ////////
 
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
