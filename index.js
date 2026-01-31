@@ -12,6 +12,9 @@ const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
 const mongoose = require("mongoose");
 
+app.get("/", (req, res) => {
+  res.status(200).send("OK");
+});
 // ===== ENV =====
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const MONGO_URI = process.env.MONGO_URI;
@@ -29,6 +32,59 @@ if (!BOT_TOKEN || !MONGO_URI || !PUBLIC_URL || !OWNER_ID) {
 // ===== BOT & SERVER =====
 const bot = new TelegramBot(BOT_TOKEN);
 const app = express();
+
+bot.onText(/\/start/, async (msg) => {
+  const chatId = msg.chat.id;
+  const name = msg.from.first_name || "Friend";
+
+  const text = `
+👋 မင်္ဂလာပါ ${name} ရေ
+
+━━━━━━━━━━━━━━━━
+💜     *Welcome To*    💜
+🎁 *Bika Comment Picker Bot*
+━━━━━━━━━━━━━━━━
+
+ဒီ Bot က Telegram Channel / Group Giveaway တွေအတွက်  
+✔️ Comment တွေထဲက  
+✔️ Random Winner ကို  
+✔️ Live Animation နဲ့  
+✔️ Fair & Safe ရွေးချယ်ပေးပါတယ်။
+
+━━━━━━━━━━━━━━━━
+🚀 *Features*
+━━━━━━━━━━━━━━━━
+• 🎯 Multi Giveaway Support  
+• 🌀 Live Spinner / Progress Bar  
+• 🏆 Winner History  
+• 🔐 Owner Approval System  
+
+━━━━━━━━━━━━━━━━
+📌 *အသုံးပြုနည်း*
+━━━━━━━━━━━━━━━━
+1️⃣ Bot ကို Discussion Group ထဲ Add ပါ  
+2️⃣ Giveaway Post ကို reply ထောက်ပြီး  
+   \`/pickwinner\` (or) \`/pickwinner 2\`  
+3️⃣ Bot က Live UI နဲ့ Winner ရွေးပေးပါမယ်
+
+━━━━━━━━━━━━━━━━
+⚠️ *သတိပြုရန်*
+━━━━━━━━━━━━━━━━
+ဒီ Bot ကို သုံးဖို့  
+Owner approval လိုအပ်ပါတယ်။
+
+📩 Owner: @Official_Bika
+
+━━━━━━━━━━━━━━━━
+✨ *Good Luck & Happy Giveaway!*
+`;
+
+  await bot.sendMessage(chatId, text, {
+    parse_mode: "Markdown",
+    disable_web_page_preview: true
+  });
+});
+
 app.use(express.json());
 
 // ===== WEBHOOK =====
