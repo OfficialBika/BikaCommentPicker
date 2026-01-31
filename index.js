@@ -31,7 +31,20 @@ if (!BOT_TOKEN || !MONGO_URI || !PUBLIC_URL || !OWNER_ID) {
 
 // ===== BOT & SERVER =====
 const bot = new TelegramBot(BOT_TOKEN);
+const app = express();
+app.use(express.json());
 
+const WEBHOOK_PATH = "/telegram/comments_picker_webhook";
+
+app.post(WEBHOOK_PATH, (req, res) => {
+  try {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+  } catch (e) {
+    console.error("webhook error:", e?.message || e);
+    res.sendStatus(500);
+  }
+});
 /////// /start ////////
 
 bot.onText(/\/start/, async (msg) => {
