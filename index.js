@@ -794,13 +794,21 @@ bot.on("callback_query", async (q) => {
 });
 
 
-// ===================================
-// SERVER
-// ===================================
-app.get("/", (_, res) => res.send("Comments Picker Bot Running"));
+// ================================
+// SERVER START
+// ================================
+app.get("/", (req, res) => {
+  res.status(200).send("OK");
+});
 
 app.listen(PORT, async () => {
-  await bot.setWebHook(`${PUBLIC_URL}${WEBHOOK_PATH}`);
-  await setupCommands();
+  try {
+    await bot.setWebHook(`${PUBLIC_URL}${WEBHOOK_PATH}`);
+    console.log("✅ Webhook set:", `${PUBLIC_URL}${WEBHOOK_PATH}`);
+  } catch (e) {
+    console.error("❌ setWebhook failed:", e.message);
+  }
+
+  console.log(`🚀 Server running on port ${PORT}`);
   console.log("✅ Bot Ready");
 });
