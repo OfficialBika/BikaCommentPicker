@@ -5,6 +5,8 @@
 // Discussion group comments saved (1 user = 1 entry per post)
 // /pickwinner (reply to forwarded post) => 20s Live UI (progress+rolling) => pick winners => cleanup entries
 // /winnerlist => winner history UI + pagination
+// /broadcast => Owner only, to all /start users + all groups
+// /admin => Owner only dashboard (users, groups, winner count, uptime)
 // Timezone: Asia/Yangon
 // ===================================
 
@@ -69,6 +71,38 @@ mongoose
 // ================================
 // MODELS
 // ================================
+
+// ---- Bot Users (/start users) ----
+const User = mongoose.model(
+  "User",
+  new mongoose.Schema(
+    {
+      userId: { type: String, unique: true },
+      username: String,
+      firstName: String,
+      lastName: String,
+      startedAt: { type: Date, default: Date.now },
+      lastSeenAt: { type: Date, default: Date.now },
+    },
+    { timestamps: true }
+  )
+);
+
+// ---- Groups where bot is used (supergroups) ----
+const GroupChat = mongoose.model(
+  "GroupChat",
+  new mongoose.Schema(
+    {
+      groupChatId: { type: String, unique: true },
+      title: String,
+      type: String, // "supergroup"
+      username: String,
+      addedAt: { type: Date, default: Date.now },
+      lastSeenAt: { type: Date, default: Date.now },
+    },
+    { timestamps: true }
+  )
+);
 
 // Owner approved groups (discussion supergroup)
 const ApprovedGroup = mongoose.model(
@@ -193,6 +227,21 @@ function formatDTYangon(d) {
   }
 }
 
+// Bot uptime
+function uptimeText() {
+  const s = Math.floor(process.uptime());
+  const days = Math.floor(s / 86400);
+  const hours = Math.floor((s % 86400) / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  const secs = s % 60;
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (mins) parts.push(`${mins}m`);
+  parts.push(`${secs}s`);
+  return parts.join(" ");
+}
+
 // Progress bar: ██████░░░░ 14/20s
 function progressBar(secLeft, total) {
   const done = total - secLeft;
@@ -206,7 +255,7 @@ function uiProgress({ secLeft, total, entries, rolling }) {
   const bar = progressBar(secLeft, total);
   return (
 `<b>🌀 Winner ရွေးချယ်နေပါပြီ...</b>
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 <b>📥 Entries</b>: <b>${escapeHTML(entries)}</b>
 <b>⏳ Countdown</b>: <b>${escapeHTML(secLeft)}s</b>
 
@@ -234,7 +283,7 @@ function uiResult({ channelPostId, entriesCount, winners }) {
 
   return (
 `🏆 <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • RESULT</b>
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 🎉 <b>ကံထူးရှင် ထွက်ပေါ်လာပါပြီ!</b>
 🧾 <b>Post</b>: <b>${escapeHTML(channelPostId)}</b>
 👥 <b>Total Entries</b>: <b>${escapeHTML(entriesCount)}</b>
@@ -242,7 +291,7 @@ function uiResult({ channelPostId, entriesCount, winners }) {
 
 ${lines}
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 🪪 <b>POWERED BY</b> ${escapeHTML(MENTION_TAG)}`
   );
 }
@@ -257,6 +306,85 @@ function shuffle(arr) {
   return a;
 }
 
+// Track /start users
+async function touchUser(from) {
+  if (!from || from.is_bot) return;
+  const userId = String(from.id);
+  await User.findOneAndUpdate(
+    { userId },
+    {
+      $setOnInsert: {
+        userId,
+        startedAt: new Date(),
+      },
+      $set: {
+        username: from.username || "",
+        firstName: from.first_name || "",
+        lastName: from.last_name || "",
+        lastSeenAt: new Date(),
+      },
+    },
+    { upsert: true, new: true }
+  );
+}
+
+// Track groups where bot is active
+async function touchGroup(chat) {
+  if (!chat || chat.type !== "supergroup") return;
+  const groupChatId = String(chat.id);
+  await GroupChat.findOneAndUpdate(
+    { groupChatId },
+    {
+      $setOnInsert: {
+        groupChatId,
+        addedAt: new Date(),
+      },
+      $set: {
+        title: chat.title || "",
+        type: chat.type,
+        username: chat.username || "",
+        lastSeenAt: new Date(),
+      },
+    },
+    { upsert: true, new: true }
+  );
+}
+
+// Broadcast helper
+async function broadcastToAll({ textHTML, photoFileId }) {
+  const users = await User.find({}, { userId: 1 }).lean();
+  const groups = await GroupChat.find({}, { groupChatId: 1 }).lean();
+
+  const targets = [
+    ...users.map((u) => ({ chatId: u.userId, kind: "user" })),
+    ...groups.map((g) => ({ chatId: g.groupChatId, kind: "group" })),
+  ];
+
+  let ok = 0;
+  let fail = 0;
+
+  for (const t of targets) {
+    try {
+      if (photoFileId) {
+        await bot.sendPhoto(t.chatId, photoFileId, {
+          caption: textHTML || "",
+          parse_mode: "HTML",
+        });
+      } else {
+        await bot.sendMessage(t.chatId, textHTML, {
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+        });
+      }
+      ok++;
+    } catch (_) {
+      fail++;
+    }
+  }
+
+  return { ok, fail, total: targets.length };
+}
+
 // ================================
 // COMMAND MENU
 // ================================
@@ -265,6 +393,8 @@ async function setupCommands() {
     await bot.setMyCommands([
       { command: "start", description: "Welcome / Help" },
       { command: "approve", description: "Owner approve (Owner only)" },
+      { command: "admin", description: "Admin Dashboard (Owner only)" },
+      { command: "broadcast", description: "Broadcast to all users + groups (Owner only)" },
       { command: "pickwinner", description: "Pick winner (reply to giveaway post)" },
       { command: "winnerlist", description: "Winner history list (this group)" },
     ]);
@@ -274,43 +404,51 @@ async function setupCommands() {
 }
 
 // ================================
-// /START (Welcome UI)
+// /START (Welcome UI + save user)
 // ================================
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
 
+  // Save user
+  await touchUser(msg.from);
+
+  // If group, track group too
+  if (msg.chat.type === "supergroup") {
+    await touchGroup(msg.chat);
+  }
+
   const text =
 `👋 မင်္ဂလာပါ ${mentionFromUser(msg.from)} ရေ
 
-━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━
 💜 <b>Welcome To</b> 💜
 🎁 <b>Bika Comment Picker Bot</b>
-━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━
 
 ဒီ Bot က Telegram Channel / Discussion Group Giveaway တွေအတွက်  
 ✔️ Comment တွေထဲက Random Winner ကို  
 ✔️ Live UI (Progress + Rolling) နဲ့  
 ✔️ Fair & Safe ရွေးချယ်ပေးပါတယ်။
 
-━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━
 🚀 <b>Features</b>
-━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━
 • 🎯 Multi Giveaway Support  
 • 🧠 1 user = 1 entry (per post)  
 • 🌀 20s Live UI  
 • 🏆 Winner History + Pagination  
 • 🔐 Owner Approval System  
 
-━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 📌 <b>အသုံးပြုနည်း</b>
-━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 1️⃣ Bot ကို <b>Discussion Group (supergroup)</b> ထဲ add လုပ်ပါ  
-2️⃣ Owner @Official_Bika က သုံမဲ့ group ထဲမှာ <b>/approve</b> ပို့ပေးမှသုံးလို့ပါမယ်  
+2️⃣ Owner @Official_Bika က သုံးမဲ့ group ထဲမှာ <b>/approve</b> ပို့ပေးမှ သုံးလို့ရပါမယ်  
 3️⃣ Channel Giveaway Post မှာ ${escapeHTML(MENTION_TAG)} ကို mention ပါအောင်တင်ပါ  
 4️⃣ Discussion Group မှာ forwarded post ကို Reply ထောက်ပြီး  
    <b>/pickwinner</b> (or) <b>/pickwinner 2</b> (or) <b>/pickwinner 3</b>
 
-━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 🍀 <b>Good Luck & Happy Giveaway!</b>`;
 
   // Logo first (if LOGO_URL provided)
@@ -347,6 +485,8 @@ bot.onText(/\/approve/, async (msg) => {
     return bot.sendMessage(chatId, "❌ Owner only command ပါ။", { parse_mode: "HTML" });
   }
 
+  await touchGroup(msg.chat);
+
   await ApprovedGroup.findOneAndUpdate(
     { groupChatId: String(chatId) },
     { $set: { groupChatId: String(chatId), approvedBy: OWNER_ID, approvedAt: new Date() } },
@@ -358,6 +498,122 @@ bot.onText(/\/approve/, async (msg) => {
     `✅ <b>Approved</b>\n\nဒီ group မှာ ${escapeHTML(MENTION_TAG)} ကို အသုံးပြုနိုင်ပါပြီ။`,
     { parse_mode: "HTML" }
   );
+});
+
+// ================================
+// /ADMIN — Owner only Dashboard
+// ================================
+bot.onText(/\/admin/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  if (!isOwner(msg.from.id)) {
+    return bot.sendMessage(chatId, "❌ Owner only command ပါ။", { parse_mode: "HTML" });
+  }
+
+  const [userCount, groupCount, winnerCount] = await Promise.all([
+    User.countDocuments({}),
+    GroupChat.countDocuments({}),
+    WinnerHistory.countDocuments({}),
+  ]);
+
+  const text =
+`📊 <b>COMMENTS PICKER — ADMIN DASHBOARD</b>
+━━━━━━━━━━━━━━━━━━━━
+👥 <b>Bot Users (/start)</b>: <b>${escapeHTML(userCount)}</b>
+💬 <b>Total Groups</b>: <b>${escapeHTML(groupCount)}</b>
+🏆 <b>Winner Count</b>: <b>${escapeHTML(winnerCount)}</b>
+
+🕒 <b>Bot Uptime</b>: <b>${escapeHTML(uptimeText())}</b>`;
+
+  await bot.sendMessage(chatId, text, { parse_mode: "HTML" });
+});
+
+// ================================
+// /BROADCAST (text) — Owner only
+// ================================
+bot.onText(/^\/broadcast(?:\s+([\s\S]+))?/, async (msg, match) => {
+  const chatId = msg.chat.id;
+
+  if (!isOwner(msg.from.id)) {
+    return bot.sendMessage(chatId, "❌ Owner only command ပါ။", { parse_mode: "HTML" });
+  }
+
+  const rawBody = match?.[1] || "";
+  const body = rawBody.trim();
+  if (!body) {
+    return bot.sendMessage(
+      chatId,
+      "Usage: <code>/broadcast Your message...</code>",
+      { parse_mode: "HTML" }
+    );
+  }
+
+  const status = await bot.sendMessage(chatId, "📣 Broadcasting…", {
+    parse_mode: "HTML",
+  });
+
+  const res = await broadcastToAll({ textHTML: escapeHTML(body) });
+
+  const doneText =
+`✅ <b>Broadcast Done</b>
+
+📤 <b>Sent</b>: <b>${escapeHTML(res.ok)}</b>
+❌ <b>Failed</b>: <b>${escapeHTML(res.fail)}</b>
+👥 <b>Total Targets</b>: <b>${escapeHTML(res.total)}</b>`;
+
+  await bot.editMessageText(doneText, {
+    chat_id: chatId,
+    message_id: status.message_id,
+    parse_mode: "HTML",
+  });
+});
+
+// ================================
+// /BROADCAST photo — Owner only
+// (send photo with caption starting with /broadcast ...)
+// ================================
+bot.on("photo", async (msg) => {
+  if (!msg.from) return;
+  if (!isOwner(msg.from.id)) return;
+
+  const caption = msg.caption || "";
+  if (!caption.startsWith("/broadcast")) return;
+
+  const body = caption.replace(/^\/broadcast\s*/i, "").trim();
+  const chatId = msg.chat.id;
+
+  if (!body) {
+    return bot.sendMessage(
+      chatId,
+      "Usage: Photo + caption <code>/broadcast Your text...</code>",
+      { parse_mode: "HTML" }
+    );
+  }
+
+  const fileId = msg.photo?.[msg.photo.length - 1]?.file_id;
+  if (!fileId) return;
+
+  const status = await bot.sendMessage(chatId, "📣 Broadcasting photo…", {
+    parse_mode: "HTML",
+  });
+
+  const res = await broadcastToAll({
+    textHTML: escapeHTML(body),
+    photoFileId: fileId,
+  });
+
+  const doneText =
+`✅ <b>Broadcast Done</b>
+
+📤 <b>Sent</b>: <b>${escapeHTML(res.ok)}</b>
+❌ <b>Failed</b>: <b>${escapeHTML(res.fail)}</b>
+👥 <b>Total Targets</b>: <b>${escapeHTML(res.total)}</b>`;
+
+  await bot.editMessageText(doneText, {
+    chat_id: chatId,
+    message_id: status.message_id,
+    parse_mode: "HTML",
+  });
 });
 
 // ================================
@@ -413,6 +669,9 @@ bot.on("message", async (msg) => {
   try {
     if (msg.chat?.type !== "supergroup") return;
 
+    // Track this group
+    await touchGroup(msg.chat);
+
     // Approved group only
     const approved = await ApprovedGroup.findOne({ groupChatId: String(msg.chat.id) }).lean();
     if (!approved) return;
@@ -451,7 +710,10 @@ bot.on("message", async (msg) => {
 
         userId,
         username: msg.from.username || "",
-        name: [msg.from.first_name, msg.from.last_name].filter(Boolean).join(" ") || msg.from.first_name || "User",
+        name:
+          [msg.from.first_name, msg.from.last_name]
+            .filter(Boolean)
+            .join(" ") || msg.from.first_name || "User",
 
         comment: commentText,
         commentMessageId: msg.message_id,
@@ -478,7 +740,11 @@ bot.onText(/\/pickwinner(?:\s+(\d+))?/, async (msg, match) => {
   const chatId = msg.chat.id;
 
   if (msg.chat.type !== "supergroup") {
-    return bot.sendMessage(chatId, "❗ /pickwinner ကို Discussion Group (supergroup) ထဲမှာပဲ သုံးနိုင်ပါတယ်။", { parse_mode: "HTML" });
+    return bot.sendMessage(
+      chatId,
+      "❗ /pickwinner ကို Discussion Group (supergroup) ထဲမှာပဲ သုံးနိုင်ပါတယ်။",
+      { parse_mode: "HTML" }
+    );
   }
 
   const approved = await ApprovedGroup.findOne({ groupChatId: String(chatId) }).lean();
@@ -521,16 +787,30 @@ bot.onText(/\/pickwinner(?:\s+(\d+))?/, async (msg, match) => {
 
   const post = await GiveawayPost.findOne({ channelId, channelPostId, picked: false });
   if (!post) {
-    return bot.sendMessage(chatId, "❌ ဒီ Giveaway Post က already picked ဖြစ်နေပြီ (or DB မတွေ့ပါ)။", { parse_mode: "HTML" });
+    return bot.sendMessage(
+      chatId,
+      "❌ ဒီ Giveaway Post က already picked ဖြစ်နေပြီ (or DB မတွေ့ပါ)။",
+      { parse_mode: "HTML" }
+    );
   }
 
   if (post.discussionChatId && String(post.discussionChatId) !== String(chatId)) {
-    return bot.sendMessage(chatId, "⚠️ ဒီ Post က ဒီ group နဲ့ မကိုက်ညီပါ (discussion link မတူပါ) သို့မဟုတ် Give Post မှာ @CommentsPickerBot ဆိုပြီး ထည့်မရေးထားပါ။", { parse_mode: "HTML" });
+    return bot.sendMessage(
+      chatId,
+      "⚠️ ဒီ Post က ဒီ group နဲ့ မကိုက်ညီပါ (discussion link မတူပါ) သို့မဟုတ် Giveaway Post မှာ @CommentsPickerBot ဆိုပြီး ထည့်မရေးထားပါ။",
+      { parse_mode: "HTML" }
+    );
   }
 
-  const entries = await Entry.find({ groupChatId: String(chatId), channelId, channelPostId }).lean();
+  const entries = await Entry.find({
+    groupChatId: String(chatId),
+    channelId,
+    channelPostId,
+  }).lean();
   if (!entries.length) {
-    return bot.sendMessage(chatId, "❌ ဒီ Post အောက်မှာ Entry မရှိသေးပါ။", { parse_mode: "HTML" });
+    return bot.sendMessage(chatId, "❌ ဒီ Post အောက်မှာ Entry မရှိသေးပါ။", {
+      parse_mode: "HTML",
+    });
   }
 
   if (k > entries.length) k = entries.length;
@@ -541,12 +821,17 @@ bot.onText(/\/pickwinner(?:\s+(\d+))?/, async (msg, match) => {
 
   const pickRollingName = () => {
     const e = entries[Math.floor(Math.random() * entries.length)];
-    return e.username ? `@${e.username}` : (e.name || "User");
+    return e.username ? `@${e.username}` : e.name || "User";
   };
 
   const uiMsg = await bot.sendMessage(
     chatId,
-    uiProgress({ secLeft: left, total, entries: entries.length, rolling: pickRollingName() }),
+    uiProgress({
+      secLeft: left,
+      total,
+      entries: entries.length,
+      rolling: pickRollingName(),
+    }),
     { parse_mode: "HTML", reply_to_message_id: replyMessageId }
   );
 
@@ -555,7 +840,12 @@ bot.onText(/\/pickwinner(?:\s+(\d+))?/, async (msg, match) => {
     if (left > 0) {
       try {
         await bot.editMessageText(
-          uiProgress({ secLeft: left, total, entries: entries.length, rolling: pickRollingName() }),
+          uiProgress({
+            secLeft: left,
+            total,
+            entries: entries.length,
+            rolling: pickRollingName(),
+          }),
           { chat_id: chatId, message_id: uiMsg.message_id, parse_mode: "HTML" }
         );
       } catch (_) {}
@@ -622,12 +912,20 @@ bot.onText(/\/winnerlist(?:\s+(\d+))?/, async (msg, match) => {
   const chatId = msg.chat.id;
 
   if (msg.chat.type !== "supergroup") {
-    return bot.sendMessage(chatId, "❗ /winnerlist ကို Discussion Group (supergroup) ထဲမှာပဲ သုံးနိုင်ပါတယ်။", { parse_mode: "HTML" });
+    return bot.sendMessage(
+      chatId,
+      "❗ /winnerlist ကို Discussion Group (supergroup) ထဲမှာပဲ သုံးနိုင်ပါတယ်။",
+      { parse_mode: "HTML" }
+    );
   }
 
   const approved = await ApprovedGroup.findOne({ groupChatId: String(chatId) }).lean();
   if (!approved) {
-    return bot.sendMessage(chatId, `❌ Owner approve မလုပ်ရသေးပါ။\nOwner က ဒီ group ထဲမှာ approve လုပ်ပေးမှ သုံးလို့ရပါမယ်။`, { parse_mode: "HTML" });
+    return bot.sendMessage(
+      chatId,
+      `❌ Owner approve မလုပ်ရသေးပါ။\nOwner က ဒီ group ထဲမှာ approve လုပ်ပေးမှ သုံးလို့ရပါမယ်။`,
+      { parse_mode: "HTML" }
+    );
   }
 
   let page = Math.max(1, Number(match?.[1] || 1));
@@ -637,7 +935,9 @@ bot.onText(/\/winnerlist(?:\s+(\d+))?/, async (msg, match) => {
 });
 
 async function buildWinnerListText(chatId, page) {
-  const total = await WinnerHistory.countDocuments({ groupChatId: String(chatId) });
+  const total = await WinnerHistory.countDocuments({
+    groupChatId: String(chatId),
+  });
 
   if (!total) {
     return {
@@ -668,25 +968,28 @@ async function buildWinnerListText(chatId, page) {
 📄 <b>Page</b>: <b>${safePage}/${totalPages}</b>
 ━━━━━━━━━━━━━━━━━━━━`;
 
-  const body = rows.map((w, idx) => {
-    const no = skip + idx + 1;
-    const who = w.winnerUsername
-      ? `@${escapeHTML(w.winnerUsername)}`
-      : mentionByIdHTML(w.winnerUserId, w.winnerName || "Winner");
+  const body = rows
+    .map((w, idx) => {
+      const no = skip + idx + 1;
+      const who = w.winnerUsername
+        ? `@${escapeHTML(w.winnerUsername)}`
+        : mentionByIdHTML(w.winnerUserId, w.winnerName || "Winner");
 
-    const when = formatDTYangon(w.pickedAt);
-    const postInfo = (w.channelPostId != null)
-      ? `🧾 <b>Post</b>: <b>${escapeHTML(w.channelPostId)}</b>`
-      : `🧾 <b>Post</b>: <i>unknown</i>`;
+      const when = formatDTYangon(w.pickedAt);
+      const postInfo =
+        w.channelPostId != null
+          ? `🧾 <b>Post</b>: <b>${escapeHTML(w.channelPostId)}</b>`
+          : `🧾 <b>Post</b>: <i>unknown</i>`;
 
-    return (
+      return (
 `🥇 <b>#${no}</b>
 👤 ${who}
 ${postInfo}
 🕒 <b>${escapeHTML(when)}</b>
 💬 <i>${escapeHTML(w.winnerComment || "")}</i>`
-    );
-  }).join("\n\n━━━━━━━━━━━━━━━━━━━━\n\n");
+      );
+    })
+    .join("\n\n━━━━━━━━━━━━━━━━━━━━\n\n");
 
   const footer =
 `\n\n━━━━━━━━━━━━━━━━━━━━
@@ -704,9 +1007,11 @@ async function sendWinnerListPage(chatId, page, editMessageId) {
   const data = await buildWinnerListText(chatId, page);
 
   const nav = [];
-  if (data.page > 1) nav.push({ text: "⬅️ Prev", callback_data: `WL_${data.page - 1}` });
+  if (data.page > 1)
+    nav.push({ text: "⬅️ Prev", callback_data: `WL_${data.page - 1}` });
   nav.push({ text: `📄 ${data.page}/${data.totalPages}`, callback_data: "WL_NOOP" });
-  if (data.page < data.totalPages) nav.push({ text: "Next ➡️", callback_data: `WL_${data.page + 1}` });
+  if (data.page < data.totalPages)
+    nav.push({ text: "Next ➡️", callback_data: `WL_${data.page + 1}` });
 
   if (editMessageId) {
     try {
@@ -728,18 +1033,19 @@ async function sendWinnerListPage(chatId, page, editMessageId) {
   });
 }
 
-// Pagination callbacks
+// Pagination callbacks for winnerlist
 bot.on("callback_query", async (q) => {
   const chatId = q.message?.chat?.id;
   const data = q.data || "";
 
-  try { await bot.answerCallbackQuery(q.id); } catch (_) {}
+  try {
+    await bot.answerCallbackQuery(q.id);
+  } catch (_) {}
 
   if (!chatId) return;
   if (data === "WL_NOOP") return;
 
   if (data.startsWith("WL_")) {
-    // must be supergroup and approved
     if (q.message.chat.type !== "supergroup") return;
 
     const approved = await ApprovedGroup.findOne({ groupChatId: String(chatId) }).lean();
