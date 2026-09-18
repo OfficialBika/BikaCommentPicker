@@ -40,7 +40,39 @@ async function start(){
   if(cmd==='/broadcast')return broadcast(m,parts.slice(1).join(' '));
  }
  async function createGiveaway(m,countArg,keyword){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');const r=m.reply_to_message;if(!r)return bot.sendMessage(m.chat.id,'Reply to the forwarded channel giveaway post. Usage: /giveaway 3 optional-keyword');const postId=r.forward_from_message_id||r.message_id;const channelId=String(r.forward_from_chat?.id||r.chat?.id||'');const count=Math.min(cfg.pickCountMax,Math.max(1,Number(countArg||1)));const g=await Giveaway.findOneAndUpdate({channelId,channelPostId:postId},{$set:{discussionChatId:String(m.chat.id),winnerCount:count,rules:{keyword:keyword||undefined,requireUsername:false,requireBotStart:false,excludeAdmins:true}},$setOnInsert:{title:(r.text||r.caption||'Giveaway').slice(0,120),status:'active',durationSeconds:cfg.rollDurationSeconds,createdBy:String(m.from.id),createdAt:new Date()}},{upsert:true,new:true});await bot.sendMessage(m.chat.id,'🎁 <b>GIVEAWAY CONFIGURED</b>\n\nID: <code>'+g._id+'</code>\nWinners: <b>'+count+'</b>\nKeyword: <b>'+esc(keyword||'None')+'</b>\n\nComments replying to this post are collected automatically.',{parse_mode:'HTML'});await AuditEvent.create({action:'create_giveaway',actorId:String(m.from.id),giveawayId:g._id,meta:{count,keyword:keyword||null}});}
- async function pick(m,arg){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');const g=await findGiveaway(m,arg);if(!g)return bot.sendMessage(m.chat.id,'No giveaway found. Reply to the giveaway post or provide its ID.');const n=Math.min(cfg.pickCountMax,Math.max(1,Number(arg||g.winnerCount||1)));try{const p=await bot.sendMessage(m.chat.id,'🎰 <b>V2 PRO PICKER</b>\n\n'+progress(0,1)+' Secure draw starting…',{parse_mode:'HTML'});const r=await pickWinners(g._id,n);const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));await bot.editMessageText('🏆 <b>WINNERS — ROUND '+r.winners[0].round+'</b>\n\n'+lines.join('\n')+'\n\n🎟️ Eligible entries: '+r.entryCount+'\n🔐 Unique candidates: '+r.candidateCount,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});await AuditEvent.create({action:'pick',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n}});}catch(e){await bot.sendMessage(m.chat.id,'❌ Pick failed: '+esc(e.message),{parse_mode:'HTML'});}}
+ async function pick(m,arg){
+  if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');
+  const g=await findGiveaway(m,arg);
+  if(!g)return bot.sendMessage(m.chat.id,'No giveaway found. Reply to the giveaway post or provide its ID.');
+  const parsed=Number(arg||g.winnerCount||1);
+  if(!Number.isInteger(parsed)||parsed<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.');
+  const n=Math.min(cfg.pickCountMax,parsed);
+  const rollEmoji='<tg-emoji emoji-id="'+esc(cfg.rollingEmojiId)+'">🎰</tg-emoji>';
+  const barSize=10;
+  let p;
+  try{
+    p=await bot.sendMessage(m.chat.id,rollEmoji+' <b>V2 PRO PICKER</b>\\n\\n'+progress(0,barSize)+' <b>ROLLING…</b>\\n\\n'+rollEmoji+' Selecting secure winners…',{parse_mode:'HTML'});
+    let lastEdit=0;
+    const r=await pickWinners(g._id,n,{
+      durationSeconds:cfg.rollDurationSeconds,
+      onProgress:async state=>{
+        const now=Date.now();
+        if(now-lastEdit<850&&state.ratio<0.99)return;
+        lastEdit=now;
+        const filled=Math.round(state.ratio*barSize);
+        const percent=Math.round(state.ratio*100);
+        const text=rollEmoji+' <b>V2 PRO PICKER</b>\\n\\n'+progress(filled,barSize)+' <b>ROLLING… '+percent+'%</b>\\n\\n'+rollEmoji+' <b>'+state.candidateCount+'</b> eligible candidates\\n\\nPlease wait…';
+        try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
+      }
+    });
+    const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));
+    await bot.editMessageText('🏆 <b>WINNERS — ROUND '+r.winners[0].round+'</b>\\n\\n'+lines.join('\\n')+'\\n\\n🎟️ Eligible entries: '+r.entryCount+'\\n🔐 Unique candidates: '+r.candidateCount,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
+    await AuditEvent.create({action:'pick',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n}});
+  }catch(e){
+    if(p){try{await bot.editMessageText('❌ <b>PICK FAILED</b>\\n\\n'+esc(e.message),{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}
+    else await bot.sendMessage(m.chat.id,'❌ Pick failed: '+esc(e.message),{parse_mode:'HTML'});
+  }
+}
  async function rerollCmd(m,arg){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');const g=await findGiveaway(m,arg);if(!g)return bot.sendMessage(m.chat.id,'No giveaway found.');const n=Math.min(cfg.pickCountMax,Math.max(1,Number(arg||g.winnerCount||1)));try{const r=await reroll(g._id,n);const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));await bot.sendMessage(m.chat.id,'🔄 <b>REROLL — ROUND '+r.round+'</b>\n\n'+lines.join('\n')+'\n\nPrevious winners are excluded.',{parse_mode:'HTML'});await AuditEvent.create({action:'reroll',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n,round:r.round}});}catch(e){await bot.sendMessage(m.chat.id,'❌ Reroll failed: '+esc(e.message),{parse_mode:'HTML'});}}
  async function winnerList(m){const parts=(m.text||'').trim().split(/\s+/);const g=await findGiveaway(m,parts[1]);if(!g)return bot.sendMessage(m.chat.id,'No giveaway found.');const rows=await Winner.find({giveawayId:g._id,status:'winner'}).sort({round:-1,rank:1}).limit(20).lean();if(!rows.length)return bot.sendMessage(m.chat.id,'No active winners found.');return bot.sendMessage(m.chat.id,'🏆 <b>WINNER HISTORY</b>\n\n'+rows.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username})+' — Round '+w.round).join('\n'),{parse_mode:'HTML'});}
  async function broadcast(m,text){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');if(!text)return bot.sendMessage(m.chat.id,'Usage: /broadcast your message');const groups=await Group.find({approved:true}).select('id').lean();const job=await BroadcastJob.create({text,createdBy:String(m.from.id),targets:groups.map(g=>({chatId:g.id,status:'pending',attempts:0}))});await bot.sendMessage(m.chat.id,'📣 Broadcast queued\nJob: <code>'+job._id+'</code>\nTargets: '+groups.length,{parse_mode:'HTML'});runBroadcast(bot,job._id,cfg,logger).catch(e=>logger.error('broadcast',e));}
