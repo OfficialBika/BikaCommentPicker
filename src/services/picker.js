@@ -87,7 +87,7 @@ async function pickWinners(id,count,options={}){
   const round=(g.pickRound||0)+1;
   const docs=selected.candidates.map((u,i)=>({
    giveawayId:id,round,userId:u.userId,username:u.username,
-   firstName:u.firstName,lastName:u.lastName,rank:i+1,status:'winner'
+   firstName:u.firstName,lastName:u.lastName,selectionMode:'normal',rank:i+1,status:'winner'
   }));
   await Winner.insertMany(docs,{ordered:true});
   const updated=await Giveaway.updateOne(
@@ -197,7 +197,7 @@ async function pickStarWinners(id,count,options={}){
    }
   }
   const round=(g.pickRound||0)+1;
-  const docs=selected.candidates.map((u,i)=>({giveawayId:id,round,userId:u.userId,username:u.username,firstName:u.firstName,lastName:u.lastName,rank:i+1,status:'winner'}));
+  const docs=selected.candidates.map((u,i)=>({giveawayId:id,round,userId:u.userId,username:u.username,firstName:u.firstName,lastName:u.lastName,selectionMode:'paid_star',rank:i+1,status:'winner'}));
   await Winner.insertMany(docs,{ordered:true});
   const updated=await Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed',pickRound:round,pickedAt:new Date()},$inc:{stateVersion:1}});
   if(!updated.modifiedCount)throw new Error('Giveaway state changed before winners could be finalized.');
@@ -208,4 +208,24 @@ async function pickStarWinners(id,count,options={}){
  }
 }
 
-module.exports={pickWinners,reroll,pickStarWinners,sampleUnique,selectRandomEntries,selectRandomPaidReactors};
+
+async function rerollStarWinners(id,count){
+ const g=await Giveaway.findById(id);
+ if(!g)throw new Error('Giveaway not found.');
+ if(g.status!=='completed')throw new Error('Giveaway must be completed before reroll.');
+ const prior=await Winner.find({giveawayId:id}).select('userId').lean();
+ const blocked=new Set(prior.map(x=>String(x.userId)));
+ const selected=await selectRandomPaidReactors(id,count,blocked);
+ if(selected.candidateCount<count)throw new Error('Not enough unused active paid Star reactors for reroll: '+selected.candidateCount+' available, '+count+' requested.');
+ const ids=selected.candidates.map(x=>String(x.userId));
+ const active=await PaidReaction.countDocuments({giveawayId:id,active:true,userId:{$in:ids}});
+ if(active<count)throw new Error('Paid Star reactions changed during reroll. Please try again.');
+ await Winner.updateMany({giveawayId:id,status:'winner'},{$set:{status:'rerolled'}});
+ const round=(g.pickRound||0)+1;
+ const docs=selected.candidates.map((u,i)=>({giveawayId:id,round,userId:u.userId,username:u.username,firstName:u.firstName,lastName:u.lastName,selectionMode:'paid_star',rank:i+1,status:'winner'}));
+ await Winner.insertMany(docs,{ordered:true});
+ await Giveaway.updateOne({_id:id},{$set:{pickRound:round,pickedAt:new Date()},$inc:{stateVersion:1}});
+ return {giveaway:g,winners:docs,entryCount:selected.candidateCount,candidateCount:selected.candidateCount,round};
+}
+
+module.exports={pickWinners,reroll,rerollStarWinners,pickStarWinners,sampleUnique,selectRandomEntries,selectRandomPaidReactors};
