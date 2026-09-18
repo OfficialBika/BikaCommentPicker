@@ -1,0 +1,18 @@
+name: V2 Pro CI
+on:
+  push:
+    branches: [v2-pro]
+  pull_request:
+    branches: [v2-pro]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install
+      - run: npm run check
+      - run: npm test
