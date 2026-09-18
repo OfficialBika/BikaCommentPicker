@@ -78,6 +78,8 @@ async function start(){
   return null;
  }
  async function comment(m){if(!['group','supergroup'].includes(m.chat.type))return;const g=await findGiveaway(m);if(g?.status==='active'){if(!g.discussionChatId){g.discussionChatId=String(m.chat.id);await g.save();}await recordComment(g,m);}}
+function customEmoji(id,fallback){return '<tg-emoji emoji-id="'+esc(id)+'">'+fallback+'</tg-emoji>';}
+function winnerDisplay(w){return w.username?'@'+esc(w.username):esc([w.firstName,w.lastName].filter(Boolean).join(' ')||'User');}
 function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.some(r=>r&&r.type==='paid');}
  async function reactionUpdate(r){
   if(!r?.chat?.id||!r.message_id||!r.user?.id)return;
@@ -133,8 +135,17 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
         try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
       }
     });
-    const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));
-    await bot.editMessageText('🏆 <b>DRAW COMPLETE</b> · ROUND '+r.winners[0].round+'\\n\\n'+lines.join('\\n')+'\\n\\n🎟️ Eligible entries: <b>'+r.entryCount+'</b>\\n👥 Candidates: <b>'+r.candidateCount+'</b>\\n🔐 <i>Secure random draw completed</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
+    const winnerIds=r.winners.map(w=>String(w.userId));
+    const entries=await Entry.find({giveawayId:g._id,userId:{$in:winnerIds}}).select('userId commentText').lean();
+    const comments=new Map(entries.map(e=>[String(e.userId),e.commentText||'']));
+    const medalIds=['5440539497383087970','5447203607294265305','5453902265922376865'];
+    const defaultMedal=['🥇','🥈','🥉'];
+    const rankEmoji=(i)=>i<3?customEmoji(medalIds[i],defaultMedal[i]):customEmoji('5150415989841593609','🎖️');
+    const lines=r.winners.map((w,i)=>rankEmoji(i)+' <b>#'+(i+1)+'</b>  '+winnerDisplay(w)+'\\n   '+customEmoji('5215334566549540768','💬')+' '+esc(comments.get(String(w.userId))||'—'));
+    const header=customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐑𝐄𝐒𝐔𝐋𝐓</b>\\n━━━━━━━━━━━━━━━\\n\\n'+customEmoji('5461151367559141950','🎉')+' <b>𝐖𝐈𝐍𝐍𝐄𝐑𝐒 𝐒𝐄𝐋𝐄𝐂𝐓𝐄𝐃</b>\\n\\n';
+    const stats=customEmoji('5444856076954520455','🧾')+' Post ID        <b>'+esc(g.channelPostId)+'</b>\\n👥 Total Entries  <b>'+r.entryCount+'</b>\\n'+customEmoji('4978994451964757181','🎖️')+' Winners        <b>'+r.winners.length+'</b>\\n'+customEmoji('5280816565657300091','🎲')+' Round          <b>'+r.winners[0].round+'</b>\\n\\n';
+    const footer='━━━━━━━━━━━━━━━\\n'+customEmoji('5197288647275071607','🛡️')+' Secure Random Draw\\n'+customEmoji('6129931368148243023','⚡')+' CMT PICKER V2 PRO\\n'+customEmoji('4907231385309152742','🪪')+' @CommentsPickerBot';
+    await bot.editMessageText(header+stats+lines.join('\\n\\n')+'\\n\\n'+footer,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
     await AuditEvent.create({action:'pick',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n}});
   }catch(e){
     if(p){try{await bot.editMessageText('⚠️ <b>DRAW COULD NOT BE COMPLETED</b>\\n\\n'+esc(e.message)+'\\n\\n<i>No winner result was published.</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}
@@ -171,8 +182,11 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
     const text=star+' <b>CMT PICKER · PAID STAR</b>\\n\\n'+progress(filled,10)+' <b>DRAWING '+percent+'%</b>\\n\\n⭐ <b>'+state.candidateCount+'</b> active paid Star reactors\\n🔐 Secure random selection\\n\n<i>Please wait while the draw is in progress…</i>';
     try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
    }});
-   const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));
-   await bot.editMessageText('⭐ <b>PAID STAR DRAW COMPLETE</b> · ROUND '+r.winners[0].round+'\\n\\n'+lines.join('\\n')+'\\n\\n⭐ Active paid Star reactors: <b>'+r.candidateCount+'</b>\\n🔐 <i>Secure random draw completed</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
+   const lines=r.winners.map((w,i)=>customEmoji('5150415989841593609','🎖️')+' <b>#'+(i+1)+'</b>  '+winnerDisplay(w));
+   const header=customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>\\n━━━━━━━━━━━━━━━\\n\\n'+customEmoji('5461151367559141950','🎉')+' <b>𝐖𝐈𝐍𝐍𝐄𝐑𝐒 𝐒𝐄𝐋𝐄𝐂𝐓𝐄𝐃</b>\\n\\n';
+   const stats=customEmoji('5444856076954520455','🧾')+' Post ID        <b>'+esc(g.channelPostId)+'</b>\\n'+customEmoji('5280816565657300091','🎲')+' Round          <b>'+r.winners[0].round+'</b>\\n'+customEmoji('4978994451964757181','🎖️')+' Winners        <b>'+r.winners.length+'</b>\\n'+customEmoji('6129931368148243023','⚡')+' Active Stars   <b>'+r.candidateCount+'</b>\\n\\n';
+   const footer='━━━━━━━━━━━━━━━\\n'+customEmoji('5197288647275071607','🛡️')+' Paid Star Random Draw\\n'+customEmoji('6129931368148243023','⚡')+' CMT PICKER V2 PRO\\n'+customEmoji('4907231385309152742','🪪')+' @CommentsPickerBot';
+   await bot.editMessageText(header+stats+lines.join('\\n\\n')+'\\n\\n'+footer,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
    await AuditEvent.create({action:'pick_star_winners',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n,paidReaction:true}});
   }catch(e){if(p){try{await bot.editMessageText('⚠️ <b>PAID STAR DRAW FAILED</b>\\n\\n'+esc(e.message)+'\\n\\n<i>No winner result was published.</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}else await bot.sendMessage(m.chat.id,'❌ Star pick failed: '+esc(e.message),{parse_mode:'HTML'});}
  }
