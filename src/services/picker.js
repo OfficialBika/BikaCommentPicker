@@ -1,5 +1,5 @@
 const crypto=require('crypto');
-const {Giveaway,Entry,Winner}=require('../models');
+const {Giveaway,Entry,PaidReaction,Winner}=require('../models');
 
 function sampleUnique(items,count){
  const a=items.slice(),out=[];
@@ -137,4 +137,75 @@ async function reroll(id,count){
  };
 }
 
-module.exports={pickWinners,reroll,sampleUnique,selectRandomEntries};
+
+async function selectRandomPaidReactors(giveawayId,count,blockedIds){
+ const filter={giveawayId,active:true};
+ if(blockedIds?.size)filter.userId={$nin:[...blockedIds]};
+ const cursor=PaidReaction.find(filter)
+  .select('userId username firstName lastName')
+  .lean()
+  .cursor({batchSize:1000});
+ const reservoir=[];
+ let seen=0;
+ try{
+  for await(const reactor of cursor){
+   seen++;
+   if(reservoir.length<count){reservoir.push(reactor);continue;}
+   const j=crypto.randomInt(seen);
+   if(j<count)reservoir[j]=reactor;
+  }
+ }finally{await cursor.close().catch(()=>{});}
+ return {candidates:reservoir,candidateCount:seen};
+}
+
+async function pickStarWinners(id,count,options={}){
+ const g=await Giveaway.findOneAndUpdate(
+  {_id:id,status:'active'},
+  {$set:{status:'picking',pickedAt:null},$inc:{stateVersion:1}},
+  {new:true}
+ );
+ if(!g)throw new Error('Giveaway is not active or is already being picked.');
+ try{
+  const prior=await Winner.find({giveawayId:id}).select('userId').lean();
+  const blocked=new Set(prior.map(x=>String(x.userId)));
+  let selected=null;
+  const excludedDuringValidation=new Set();
+  for(let attempt=0;attempt<5;attempt++){
+   const scanBlocked=new Set([...blocked,...excludedDuringValidation]);
+   const result=await selectRandomPaidReactors(id,count,scanBlocked);
+   if(result.candidateCount<count)throw new Error('Not enough active paid Star reactors: '+result.candidateCount+' available, '+count+' requested.');
+   const ids=result.candidates.map(x=>String(x.userId));
+   const stillActive=await PaidReaction.find({giveawayId:id,active:true,userId:{$in:ids}}).select('userId').lean();
+   const activeIds=new Set(stillActive.map(x=>String(x.userId)));
+   const invalid=ids.filter(x=>!activeIds.has(x));
+   if(!invalid.length){selected=result;break;}
+   invalid.forEach(x=>excludedDuringValidation.add(x));
+  }
+  if(!selected)throw new Error('Paid Star reactions changed during picking. Please run /pickstarwinner again.');
+
+  const durationMs=Math.max(0,Number(options.durationSeconds||0)*1000);
+  const onProgress=typeof options.onProgress==='function'?options.onProgress:null;
+  if(onProgress&&durationMs>0){
+   const started=Date.now();
+   let tick=0;
+   while(Date.now()-started<durationMs){
+    const elapsed=Date.now()-started,ratio=Math.min(1,elapsed/durationMs);
+    await onProgress({phase:'rolling',elapsedMs:elapsed,durationMs,ratio,tick:++tick,candidateCount:selected.candidateCount});
+    const remaining=durationMs-(Date.now()-started);
+    if(remaining<=0)break;
+    await sleep(Math.min(1000,remaining));
+   }
+  }
+  const round=(g.pickRound||0)+1;
+  const docs=selected.candidates.map((u,i)=>({giveawayId:id,round,userId:u.userId,username:u.username,firstName:u.firstName,lastName:u.lastName,rank:i+1,status:'winner'}));
+  await Winner.insertMany(docs,{ordered:true});
+  const updated=await Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed',pickRound:round,pickedAt:new Date()},$inc:{stateVersion:1}});
+  if(!updated.modifiedCount)throw new Error('Giveaway state changed before winners could be finalized.');
+  return {giveaway:g,winners:docs,entryCount:selected.candidateCount,candidateCount:selected.candidateCount};
+ }catch(e){
+  await Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'active'},$inc:{stateVersion:1}}).catch(()=>{});
+  throw e;
+ }
+}
+
+module.exports={pickWinners,reroll,pickStarWinners,sampleUnique,selectRandomEntries,selectRandomPaidReactors};
