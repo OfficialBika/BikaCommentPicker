@@ -119,7 +119,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   const barSize=10;
   let p;
   try{
-    p=await bot.sendMessage(m.chat.id,rollEmoji+' <b>V2 PRO PICKER</b>\\n\\n'+progress(0,barSize)+' <b>ROLLING…</b>\\n\\n'+rollEmoji+' Selecting secure winners…',{parse_mode:'HTML'});
+    p=await bot.sendMessage(m.chat.id,rollEmoji+' <b>V2 PRO PICKER</b>\\n\\n'+progress(0,barSize)+' <b>ROLLING…</b>\\n\\n'+rollEmoji+' Selecting secure winners…',{parse_mode:'HTML',reply_to_message_id:m.message_id});
     let lastEdit=0;
     const r=await pickWinners(g._id,n,{
       durationSeconds:cfg.rollDurationSeconds,
@@ -163,7 +163,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(n>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per pick is '+cfg.pickCountMax+'.');
   const star='⭐';let p;
   try{
-   p=await bot.sendMessage(m.chat.id,star+' <b>PAID STAR PICKER</b>\\n\\n'+progress(0,10)+' <b>ROLLING…</b>\\n\\n'+star+' Selecting paid Star reactors…',{parse_mode:'HTML'});
+   p=await bot.sendMessage(m.chat.id,star+' <b>PAID STAR PICKER</b>\\n\\n'+progress(0,10)+' <b>ROLLING…</b>\\n\\n'+star+' Selecting paid Star reactors…',{parse_mode:'HTML',reply_to_message_id:m.message_id});
    let lastEdit=0;
    const r=await pickStarWinners(g._id,n,{durationSeconds:cfg.rollDurationSeconds,onProgress:async state=>{
     const now=Date.now();if(now-lastEdit<850&&state.ratio<0.99)return;lastEdit=now;
