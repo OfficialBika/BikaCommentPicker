@@ -11,7 +11,7 @@ const paidReactionSchema=new Schema({giveawayId:{type:Schema.Types.ObjectId,ref:
 paidReactionSchema.index({giveawayId:1,userId:1},{unique:true});
 paidReactionSchema.index({giveawayId:1,active:1,userId:1});
 
-const winnerSchema=new Schema({giveawayId:{type:Schema.Types.ObjectId,ref:'Giveaway',index:true},round:{type:Number,default:1},userId:String,username:String,firstName:String,lastName:String,rank:Number,selectedAt:{type:Date,default:Date.now},status:{type:String,enum:['winner','rerolled','void'],default:'winner'}});
+const winnerSchema=new Schema({giveawayId:{type:Schema.Types.ObjectId,ref:'Giveaway',index:true},round:{type:Number,default:1},userId:String,username:String,firstName:String,lastName:String,selectionMode:{type:String,enum:['normal','paid_star'],default:'normal'},rank:Number,selectedAt:{type:Date,default:Date.now},status:{type:String,enum:['winner','rerolled','void'],default:'winner'}});
 winnerSchema.index({giveawayId:1,round:1,userId:1},{unique:true});
 const broadcastSchema=new Schema({text:String,targets:[{chatId:String,status:{type:String,enum:['pending','sent','failed'],default:'pending'},attempts:{type:Number,default:0},error:String}],status:{type:String,enum:['queued','running','completed','partial','failed'],default:'queued'},createdBy:String,startedAt:Date,finishedAt:Date},{timestamps:true});
 const auditSchema=new Schema({action:String,actorId:String,giveawayId:Schema.Types.ObjectId,targetId:String,meta:Schema.Types.Mixed,createdAt:{type:Date,default:Date.now}});
