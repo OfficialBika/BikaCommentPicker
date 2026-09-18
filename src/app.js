@@ -24,7 +24,29 @@ async function start(){
  async function saveGroup(c){if(!c||!['group','supergroup'].includes(c.type))return;await Group.updateOne({id:String(c.id)},{$set:{title:c.title||'',type:c.type,username:c.username||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
  async function handleUpdate(u){if(u.callback_query)return callback(u.callback_query);if(u.message_reaction)return reactionUpdate(u.message_reaction);const m=u.message||u.channel_post;if(u.message?.text?.startsWith('/')){if(m?.from)await saveUser(m.from);if(m?.chat)await saveGroup(m.chat);return command(u.message);}if(u.channel_post){if(m?.chat)await saveGroup(m.chat);return channelPost(u.channel_post);}if(m?.reply_to_message)return comment(m);}
  async function channelPost(p){const text=p.text||p.caption||'';if(!text.toLowerCase().includes(cfg.mentionTag.toLowerCase()))return;await Giveaway.findOneAndUpdate({channelId:String(p.chat.id),channelPostId:p.message_id},{$setOnInsert:{channelId:String(p.chat.id),channelPostId:p.message_id,title:text.slice(0,120),status:'active',winnerCount:1,durationSeconds:cfg.rollDurationSeconds,createdAt:new Date()}},{upsert:true,new:true});}
- async function findGiveaway(msg,explicitId){if(explicitId){const byId=await Giveaway.findById(explicitId).catch(()=>null);if(byId&&(!byId.discussionChatId||String(byId.discussionChatId)===String(msg.chat.id)))return byId;}const r=msg.reply_to_message;if(r){const postId=r.forward_from_message_id||r.message_id;const ch=String(r.forward_from_chat?.id||r.chat?.id||'');const g=await Giveaway.findOne({channelPostId:postId,$or:[{channelId:ch},{discussionChatId:String(msg.chat.id)}]}).sort({createdAt:-1});if(g)return g;}return null;}
+ async function findGiveaway(msg,explicitId){
+  if(explicitId){
+   const byId=await Giveaway.findById(explicitId).catch(()=>null);
+   if(byId&&(!byId.discussionChatId||String(byId.discussionChatId)===String(msg.chat.id)))return byId;
+  }
+  const r=msg.reply_to_message;
+  if(r){
+   const postId=r.forward_from_message_id||r.message_id;
+   const ch=String(r.forward_from_chat?.id||r.chat?.id||'');
+   const g=await Giveaway.findOne({channelPostId:postId,$or:[{channelId:ch},{discussionChatId:String(msg.chat.id)}]}).sort({createdAt:-1});
+   if(g)return g;
+  }
+  // Commands posted anywhere in the giveaway discussion chat should resolve
+  // to the active giveaway even when the command replies to another comment.
+  if(['group','supergroup'].includes(msg.chat?.type)){
+   const g=await Giveaway.findOne({
+    discussionChatId:String(msg.chat.id),
+    status:{$in:['active','picking']}
+   }).sort({createdAt:-1});
+   if(g)return g;
+  }
+  return null;
+}
  async function comment(m){if(!['group','supergroup'].includes(m.chat.type))return;const g=await findGiveaway(m);if(g?.status==='active'){if(!g.discussionChatId){g.discussionChatId=String(m.chat.id);await g.save();}await recordComment(g,m);}}
 function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.some(r=>r&&r.type==='paid');}
  async function reactionUpdate(r){
