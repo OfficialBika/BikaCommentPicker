@@ -6,7 +6,7 @@ function sampleUnique(items,count){
  for(let i=0;i<count&&a.length;i++){
   const j=crypto.randomInt(a.length);
   out.push(a[j]);
-  a[i===j?j:a.length-1]=a[a.length-1];
+  a[j]=a[a.length-1];
   a.pop();
  }
  return out;
