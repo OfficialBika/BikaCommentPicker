@@ -5,6 +5,8 @@ const giveawaySchema=new Schema({channelId:{type:String,index:true},channelPostI
 giveawaySchema.index({channelId:1,channelPostId:1},{unique:true,sparse:true});
 const entrySchema=new Schema({giveawayId:{type:Schema.Types.ObjectId,ref:'Giveaway',index:true},channelId:String,channelPostId:Number,groupChatId:String,userId:String,username:String,firstName:String,lastName:String,commentMessageId:Number,commentText:String,eligible:{type:Boolean,default:true},rejectedReason:String,enteredAt:{type:Date,default:Date.now}});
 entrySchema.index({giveawayId:1,userId:1},{unique:true});
+entrySchema.index({giveawayId:1,eligible:1,userId:1});
+entrySchema.index({giveawayId:1,eligible:1,enteredAt:1});
 const winnerSchema=new Schema({giveawayId:{type:Schema.Types.ObjectId,ref:'Giveaway',index:true},round:{type:Number,default:1},userId:String,username:String,firstName:String,lastName:String,rank:Number,selectedAt:{type:Date,default:Date.now},status:{type:String,enum:['winner','rerolled','void'],default:'winner'}});
 winnerSchema.index({giveawayId:1,round:1,userId:1},{unique:true});
 const broadcastSchema=new Schema({text:String,targets:[{chatId:String,status:{type:String,enum:['pending','sent','failed'],default:'pending'},attempts:{type:Number,default:0},error:String}],status:{type:String,enum:['queued','running','completed','partial','failed'],default:'queued'},createdBy:String,startedAt:Date,finishedAt:Date},{timestamps:true});
