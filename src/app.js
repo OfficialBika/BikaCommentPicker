@@ -96,7 +96,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
  async function owner(id){return cfg.ownerId&&String(id)===cfg.ownerId;}
  async function admin(m){if(await owner(m.from.id))return true;if(!['group','supergroup'].includes(m.chat.type))return false;try{const x=await bot.getChatMember(m.chat.id,m.from.id);return ['administrator','creator'].includes(x.status);}catch{return false;}}
  async function command(m){const parts=(m.text||'').trim().split(/\s+/);const cmd=(parts[0]||'').split('@')[0].toLowerCase();
-  if(cmd==='/start')return bot.sendMessage(m.chat.id,'🎟️ <b>Cmt Picker V2 Pro</b>\n\nSecure giveaway picker with unique winners, reroll history and health monitoring.',{parse_mode:'HTML'});
+  if(cmd==='/start')return bot.sendMessage(m.chat.id,'🎟️ <b>CMT PICKER</b>\n\n<b>V2 PRO</b> · Secure Giveaway Engine\n\n🎁 <b>Giveaway Picker</b>\n⭐ <b>Paid Star Picker</b>\n🔄 <b>Reroll & Winner History</b>\n🛡️ <b>Admin-only Controls</b>\n\n<i>Ready to pick winners fairly and securely.</i>',{parse_mode:'HTML'});
   if(cmd==='/approve'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');await Group.updateOne({id:String(m.chat.id)},{$set:{approved:true}},{upsert:true});return bot.sendMessage(m.chat.id,'✅ Group approved for comment collection.');}
   if(cmd==='/admin'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');const [u,g,w,e]=await Promise.all([User.countDocuments(),Group.countDocuments(),Giveaway.countDocuments(),Entry.countDocuments()]);return bot.sendMessage(m.chat.id,'<b>V2 PRO DASHBOARD</b>\n\n👤 Users: <b>'+u+'</b>\n👥 Groups: <b>'+g+'</b>\n🎁 Giveaways: <b>'+w+'</b>\n💬 Entries: <b>'+e+'</b>\n\n/status - system health',{parse_mode:'HTML'});}
   if(cmd==='/status'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');return bot.sendMessage(m.chat.id,'🟢 <b>V2 Pro Online</b>\nUptime: '+Math.floor(process.uptime())+'s\nMongo: '+(mongoose.connection.readyState===1?'connected':'disconnected')+'\nNode: '+process.version,{parse_mode:'HTML'});}
@@ -119,7 +119,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   const barSize=10;
   let p;
   try{
-    p=await bot.sendMessage(m.chat.id,rollEmoji+' <b>V2 PRO PICKER</b>\\n\\n'+progress(0,barSize)+' <b>ROLLING…</b>\\n\\n'+rollEmoji+' Selecting secure winners…',{parse_mode:'HTML',reply_to_message_id:m.message_id});
+    p=await bot.sendMessage(m.chat.id,rollEmoji+' <b>CMT PICKER · V2 PRO</b>\\n\\n'+progress(0,barSize)+' <b>DRAWING…</b>\\n\\n👥 Preparing eligible entries…\\n🔐 Secure random selection\\n\n<i>Please wait…</i>',{parse_mode:'HTML',reply_to_message_id:m.message_id});
     let lastEdit=0;
     const r=await pickWinners(g._id,n,{
       durationSeconds:cfg.rollDurationSeconds,
@@ -129,15 +129,15 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
         lastEdit=now;
         const filled=Math.round(state.ratio*barSize);
         const percent=Math.round(state.ratio*100);
-        const text=rollEmoji+' <b>V2 PRO PICKER</b>\\n\\n'+progress(filled,barSize)+' <b>ROLLING… '+percent+'%</b>\\n\\n'+rollEmoji+' <b>'+state.candidateCount+'</b> eligible candidates\\n\\nPlease wait…';
+        const text=rollEmoji+' <b>CMT PICKER · V2 PRO</b>\\n\\n'+progress(filled,barSize)+' <b>DRAWING '+percent+'%</b>\\n\\n👥 <b>'+state.candidateCount+'</b> eligible entries\\n🔐 Secure random selection\\n\n<i>Please wait while the draw is in progress…</i>';
         try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
       }
     });
     const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));
-    await bot.editMessageText('🏆 <b>WINNERS — ROUND '+r.winners[0].round+'</b>\\n\\n'+lines.join('\\n')+'\\n\\n🎟️ Eligible entries: '+r.entryCount+'\\n🔐 Unique candidates: '+r.candidateCount,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
+    await bot.editMessageText('🏆 <b>DRAW COMPLETE</b> · ROUND '+r.winners[0].round+'\\n\\n'+lines.join('\\n')+'\\n\\n🎟️ Eligible entries: <b>'+r.entryCount+'</b>\\n👥 Candidates: <b>'+r.candidateCount+'</b>\\n🔐 <i>Secure random draw completed</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
     await AuditEvent.create({action:'pick',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n}});
   }catch(e){
-    if(p){try{await bot.editMessageText('❌ <b>PICK FAILED</b>\\n\\n'+esc(e.message),{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}
+    if(p){try{await bot.editMessageText('⚠️ <b>DRAW COULD NOT BE COMPLETED</b>\\n\\n'+esc(e.message)+'\\n\\n<i>No winner result was published.</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}
     else await bot.sendMessage(m.chat.id,'❌ Pick failed: '+esc(e.message),{parse_mode:'HTML'});
   }
 }
@@ -163,18 +163,18 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(n>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per pick is '+cfg.pickCountMax+'.');
   const star='⭐';let p;
   try{
-   p=await bot.sendMessage(m.chat.id,star+' <b>PAID STAR PICKER</b>\\n\\n'+progress(0,10)+' <b>ROLLING…</b>\\n\\n'+star+' Selecting paid Star reactors…',{parse_mode:'HTML',reply_to_message_id:m.message_id});
+   p=await bot.sendMessage(m.chat.id,star+' <b>CMT PICKER · PAID STAR</b>\\n\\n'+progress(0,10)+' <b>DRAWING…</b>\\n\\n⭐ Preparing active paid Star reactors…\\n🔐 Secure random selection\\n\n<i>Please wait…</i>',{parse_mode:'HTML',reply_to_message_id:m.message_id});
    let lastEdit=0;
    const r=await pickStarWinners(g._id,n,{durationSeconds:cfg.rollDurationSeconds,onProgress:async state=>{
     const now=Date.now();if(now-lastEdit<850&&state.ratio<0.99)return;lastEdit=now;
     const percent=Math.round(state.ratio*100),filled=Math.round(state.ratio*10);
-    const text=star+' <b>PAID STAR PICKER</b>\\n\\n'+progress(filled,10)+' <b>ROLLING… '+percent+'%</b>\\n\\n'+star+' <b>'+state.candidateCount+'</b> active paid Star reactors\\n\\nPlease wait…';
+    const text=star+' <b>CMT PICKER · PAID STAR</b>\\n\\n'+progress(filled,10)+' <b>DRAWING '+percent+'%</b>\\n\\n⭐ <b>'+state.candidateCount+'</b> active paid Star reactors\\n🔐 Secure random selection\\n\n<i>Please wait while the draw is in progress…</i>';
     try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
    }});
    const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));
-   await bot.editMessageText('⭐ <b>PAID STAR WINNERS — ROUND '+r.winners[0].round+'</b>\\n\\n'+lines.join('\\n')+'\\n\\n⭐ Active paid Star reactors: '+r.candidateCount,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
+   await bot.editMessageText('⭐ <b>PAID STAR DRAW COMPLETE</b> · ROUND '+r.winners[0].round+'\\n\\n'+lines.join('\\n')+'\\n\\n⭐ Active paid Star reactors: <b>'+r.candidateCount+'</b>\\n🔐 <i>Secure random draw completed</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
    await AuditEvent.create({action:'pick_star_winners',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n,paidReaction:true}});
-  }catch(e){if(p){try{await bot.editMessageText('❌ <b>STAR PICK FAILED</b>\\n\\n'+esc(e.message),{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}else await bot.sendMessage(m.chat.id,'❌ Star pick failed: '+esc(e.message),{parse_mode:'HTML'});}
+  }catch(e){if(p){try{await bot.editMessageText('⚠️ <b>PAID STAR DRAW FAILED</b>\\n\\n'+esc(e.message)+'\\n\\n<i>No winner result was published.</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}else await bot.sendMessage(m.chat.id,'❌ Star pick failed: '+esc(e.message),{parse_mode:'HTML'});}
  }
  async function rerollCmd(m,arg){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');const g=await findGiveaway(m,arg);if(!g)return bot.sendMessage(m.chat.id,'No giveaway found.');const raw=Number(arg||g.winnerCount||1);if(!Number.isInteger(raw)||raw<1)return bot.sendMessage(m.chat.id,'❌ Reroll count must be a whole number greater than 0.');if(raw>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per reroll is '+cfg.pickCountMax+'.');const n=raw;try{const latestWinner=await Winner.findOne({giveawayId:g._id,status:'winner'}).sort({round:-1}).lean();const r=latestWinner?.selectionMode==='paid_star'?await rerollStarWinners(g._id,n):await reroll(g._id,n);const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));await bot.sendMessage(m.chat.id,'🔄 <b>REROLL — ROUND '+r.round+'</b>\n\n'+lines.join('\n')+'\n\nPrevious winners are excluded.',{parse_mode:'HTML'});await AuditEvent.create({action:'reroll',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n,round:r.round}});}catch(e){await bot.sendMessage(m.chat.id,'❌ Reroll failed: '+esc(e.message),{parse_mode:'HTML'});}}
  async function winnerList(m){const parts=(m.text||'').trim().split(/\s+/);const g=await findGiveaway(m,parts[1]);if(!g)return bot.sendMessage(m.chat.id,'No giveaway found.');const rows=await Winner.find({giveawayId:g._id,status:'winner'}).sort({round:-1,rank:1}).limit(20).lean();if(!rows.length)return bot.sendMessage(m.chat.id,'No active winners found.');return bot.sendMessage(m.chat.id,'🏆 <b>WINNER HISTORY</b>\n\n'+rows.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username})+' — Round '+w.round).join('\n'),{parse_mode:'HTML'});}
