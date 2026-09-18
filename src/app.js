@@ -119,6 +119,8 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(parsed>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per pick is '+cfg.pickCountMax+'.');const n=parsed;
   const rollEmoji='<tg-emoji emoji-id="'+esc(cfg.rollingEmojiId)+'">🎰</tg-emoji>';
   const barSize=10;
+  const rollDurationMs=20000;
+  const rollStepMs=2000;
   let p;
   try{
     const rollTitle=customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐃𝐑𝐀𝐖𝐈𝐍𝐆</b>';
@@ -128,21 +130,29 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
     const winnerEmoji=customEmoji('4978994451964757181','🎖️');
     const secureEmoji=customEmoji('5224607267797606837','☄️');
     const waitEmoji=customEmoji('5399850755337240950','⏳');
-    p=await bot.sendMessage(m.chat.id,rollTitle+'\n━━━━━━━━━━━━━━\n\n'+selectEmoji+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 𝐖𝐈𝐍𝐍𝐄𝐑𝐒...</b>\n'+progress(0,barSize)+'\n\n'+roundEmoji+' Round <b>1</b>\n'+candidateEmoji+' Candidates: <b>Preparing...</b>\n'+winnerEmoji+' Winners: <b>'+n+'</b>\n'+secureEmoji+' Secure random selection\n'+waitEmoji+' Please wait...', {parse_mode:'HTML',reply_to_message_id:m.message_id});
-    let lastEdit=0;
+    const renderRolling=(filled,candidates)=>rollTitle+'\\n━━━━━━━━━━━━━━\\n\\n'+selectEmoji+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 𝐖𝐈𝐍𝐍𝐄𝐑𝐒...</b>\\n'+progress(filled,barSize)+'\\n\\n'+roundEmoji+' Round <b>1</b>\\n'+candidateEmoji+' Candidates: <b>'+candidates+'</b>\\n'+winnerEmoji+' Winners: <b>'+n+'</b>\\n'+secureEmoji+' Secure random selection\\n'+waitEmoji+' Please wait...';
+    p=await bot.sendMessage(m.chat.id,renderRolling(0,'Preparing...'),{parse_mode:'HTML',reply_to_message_id:m.message_id});
+    let nextStep=1;
+    let nextEditAt=Date.now()+rollStepMs;
+    let latestCandidates='Preparing...';
     const r=await pickWinners(g._id,n,{
-      durationSeconds:cfg.rollDurationSeconds,
+      durationSeconds:20,
       onProgress:async state=>{
+        latestCandidates=state.candidateCount;
         const now=Date.now();
-        if(now-lastEdit<850&&state.ratio<0.99)return;
-        lastEdit=now;
-        const filled=Math.round(state.ratio*barSize);
-        const percent=Math.round(state.ratio*100);
-        const text=rollTitle+'\n━━━━━━━━━━━━━━\n\n'+selectEmoji+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 𝐖𝐈𝐍𝐍𝐄𝐑𝐒...</b>\n'+progress(filled,barSize)+'\n\n'+roundEmoji+' Round <b>1</b>\n'+candidateEmoji+' Candidates: <b>'+state.candidateCount+'</b>\n'+winnerEmoji+' Winners: <b>'+n+'</b>\n'+secureEmoji+' Secure random selection\n'+waitEmoji+' Please wait...';
-        try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
+        while(nextStep<=barSize&&now>=nextEditAt){
+          const filled=nextStep;
+          nextStep++;
+          nextEditAt+=rollStepMs;
+          const text=renderRolling(filled,latestCandidates);
+          try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
+        }
       }
     });
-    const winnerIds=r.winners.map(w=>String(w.userId));
+    if(nextStep<=barSize){
+      const text=renderRolling(barSize,latestCandidates);
+      try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
+    }    const winnerIds=r.winners.map(w=>String(w.userId));
     const entries=await Entry.find({giveawayId:g._id,userId:{$in:winnerIds}}).select('userId commentText').lean();
     const comments=new Map(entries.map(e=>[String(e.userId),e.commentText||'']));
     const medalIds=['5440539497383087970','5447203607294265305','5453902265922376865'];
