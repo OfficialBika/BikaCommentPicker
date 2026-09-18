@@ -12,7 +12,8 @@ function loadConfig() {
     port: intEnv('PORT', 3000, 1, 65535), timezone: process.env.TIMEZONE || 'Asia/Yangon', nodeEnv: process.env.NODE_ENV || 'production',
     pickCountMax: intEnv('PICK_COUNT_MAX', 20, 1, 100), rollDurationSeconds: intEnv('ROLL_DURATION_SECONDS', 20, 0, 120),
     entryCooldownMs: intEnv('ENTRY_COOLDOWN_MS', 0, 0, 86400000), broadcastConcurrency: intEnv('BROADCAST_CONCURRENCY', 1, 1, 10),
-    broadcastDelayMs: intEnv('BROADCAST_DELAY_MS', 80, 0, 10000), broadcastMaxRetries: intEnv('BROADCAST_MAX_RETRIES', 3, 0, 10), logLevel: process.env.LOG_LEVEL || 'info'
+    broadcastDelayMs: intEnv('BROADCAST_DELAY_MS', 80, 0, 10000), broadcastMaxRetries: intEnv('BROADCAST_MAX_RETRIES', 3, 0, 10), logLevel: process.env.LOG_LEVEL || 'info',
+    rollingEmojiId: process.env.ROLLING_EMOJI_ID || '5258077393884562645'
   });
 }
 module.exports = { loadConfig };
