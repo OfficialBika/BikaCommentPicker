@@ -121,7 +121,14 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   const barSize=10;
   let p;
   try{
-    p=await bot.sendMessage(m.chat.id,rollEmoji+' <b>CMT PICKER · V2 PRO</b>\\n\\n'+progress(0,barSize)+' <b>DRAWING…</b>\\n\\n👥 Preparing eligible entries…\\n🔐 Secure random selection\\n\n<i>Please wait…</i>',{parse_mode:'HTML',reply_to_message_id:m.message_id});
+    const rollTitle=customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐃𝐑𝐀𝐖𝐈𝐍𝐆</b>';
+    const selectEmoji=customEmoji('5314336934271663511','🌟');
+    const roundEmoji=customEmoji('5260547274957672345','🎲');
+    const candidateEmoji=customEmoji('5985525762973768278','👥');
+    const winnerEmoji=customEmoji('4978994451964757181','🎖️');
+    const secureEmoji=customEmoji('5224607267797606837','☄️');
+    const waitEmoji=customEmoji('5399850755337240950','⏳');
+    p=await bot.sendMessage(m.chat.id,rollTitle+'\n━━━━━━━━━━━━━━\n\n'+selectEmoji+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 𝐖𝐈𝐍𝐍𝐄𝐑𝐒...</b>\n'+progress(0,barSize)+'\n\n'+roundEmoji+' Round <b>1</b>\n'+candidateEmoji+' Candidates: <b>Preparing...</b>\n'+winnerEmoji+' Winners: <b>'+n+'</b>\n'+secureEmoji+' Secure random selection\n'+waitEmoji+' Please wait...', {parse_mode:'HTML',reply_to_message_id:m.message_id});
     let lastEdit=0;
     const r=await pickWinners(g._id,n,{
       durationSeconds:cfg.rollDurationSeconds,
@@ -131,7 +138,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
         lastEdit=now;
         const filled=Math.round(state.ratio*barSize);
         const percent=Math.round(state.ratio*100);
-        const text=rollEmoji+' <b>CMT PICKER · V2 PRO</b>\\n\\n'+progress(filled,barSize)+' <b>DRAWING '+percent+'%</b>\\n\\n👥 <b>'+state.candidateCount+'</b> eligible entries\\n🔐 Secure random selection\\n\n<i>Please wait while the draw is in progress…</i>';
+        const text=rollTitle+'\n━━━━━━━━━━━━━━\n\n'+selectEmoji+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 𝐖𝐈𝐍𝐍𝐄𝐑𝐒...</b>\n'+progress(filled,barSize)+'\n\n'+roundEmoji+' Round <b>1</b>\n'+candidateEmoji+' Candidates: <b>'+state.candidateCount+'</b>\n'+winnerEmoji+' Winners: <b>'+n+'</b>\n'+secureEmoji+' Secure random selection\n'+waitEmoji+' Please wait...';
         try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
       }
     });
