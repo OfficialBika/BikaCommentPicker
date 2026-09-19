@@ -123,8 +123,10 @@ async function start(){
 function customEmoji(id,fallback){return '<tg-emoji emoji-id="'+esc(id)+'">'+fallback+'</tg-emoji>';}
 function winnerDisplay(w){
  const name=[w.firstName,w.lastName].filter(Boolean).join(' ')||w.username||'User';
+ // Keep winner output HTML-safe. Telegram HTML parsing is strict, so do not
+ // build dynamic <a> tags from user-controlled winner data.
  if(w.username)return '@'+esc(w.username);
- return w.userId?'<a href="tg://user?id='+esc(w.userId)+'">'+esc(name)+'</a>':esc(name);
+ return esc(name);
 }
 function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.some(r=>r&&r.type==='paid');}
  async function reactionUpdate(r){
@@ -147,8 +149,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   await Giveaway.updateOne({_id:g._id},{$set:{lastReactionUpdateAt:now}}).catch(()=>{});
 
   // Telegram omits user for anonymous reactions and supplies actor_chat instead.
-  // Anonymous reactions are counted for diagnostics, but cannot be selected as
-  // individual winners because there is no Telegram user ID to persist.
+  // Anonymous reactions are counted for diagnostics, but cannot be selected as  // individual winners because there is no Telegram user ID to persist.
   if(!r.user?.id){
    await AuditEvent.create({
     action:hasPaidReaction(r.new_reaction)?'paid_star_anonymous_reaction':'anonymous_reaction_changed',
@@ -297,8 +298,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
    g=await findGiveaway(m);
    if(!g)return bot.sendMessage(m.chat.id,'No giveaway found. Reply to the giveaway post or provide its ID.');
    n=arg===undefined?Number(g.winnerCount||1):Number(arg);
-  }else{
-   const raw=String(arg||'');
+  }else{   const raw=String(arg||'');
    if(/^[0-9]+$/.test(raw)){
     const possibleCount=Number(raw);
     if(possibleCount>=1&&possibleCount<=cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Reply to the giveaway post when using a winner count. Example: /pickstarwinner 3');
@@ -447,8 +447,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
    '🕒 Last Reaction Update: <b>'+esc(last)+'</b>',
    '',
    '💡 Only identifiable users can be selected as winners.'
-  ].join('\n');
-  return bot.sendMessage(m.chat.id,text,{parse_mode:'HTML',reply_to_message_id:m.message_id});
+  ].join('\n');  return bot.sendMessage(m.chat.id,text,{parse_mode:'HTML',reply_to_message_id:m.message_id});
  }
  async function broadcast(m,text){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');if(!text)return bot.sendMessage(m.chat.id,'Usage: /broadcast your message');const groups=await Group.find({approved:true}).select('id').lean();const job=await BroadcastJob.create({text,createdBy:String(m.from.id),targets:groups.map(g=>({chatId:g.id,status:'pending',attempts:0}))});await bot.sendMessage(m.chat.id,'📣 Broadcast queued\nJob: <code>'+job._id+'</code>\nTargets: '+groups.length,{parse_mode:'HTML'});runBroadcast(bot,job._id,cfg,logger).catch(e=>logger.error('broadcast',e));}
  async function callback(q){try{await bot.answerCallbackQuery(q.id);}catch{}}
