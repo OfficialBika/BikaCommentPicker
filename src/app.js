@@ -17,19 +17,49 @@ async function start(){
  app.get('/health',(_,res)=>res.json({ok:true,status:'healthy',uptime:process.uptime(),mongo:mongoose.connection.readyState===1}));
  app.get('/ready',(_,res)=>res.status(mongoose.connection.readyState===1?200:503).json({ok:mongoose.connection.readyState===1}));
  const path='/telegram/comments_picker_v2_webhook';
- app.post(path,async(req,res)=>{res.sendStatus(200);try{await handleUpdate(req.body);}catch(e){logger.error('update error',e.stack||e.message);}});
+ const allowedUpdates=['message','channel_post','callback_query','message_reaction','message_reaction_count'];
+ app.post(path,(req,res)=>{
+  // A Telegram webhook must receive a fast 2xx response. Never make Telegram
+  // wait for MongoDB or winner-processing work before acknowledging the update.
+  if(!res.headersSent)res.status(200).json({ok:true});
+  Promise.resolve(handleUpdate(req.body)).catch(e=>{
+   logger.error('update error',e.stack||e.message);
+  });
+ });
+ const server=app.listen(cfg.port);
+ await new Promise((resolve,reject)=>{
+  server.once('listening',resolve);
+  server.once('error',reject);
+ });
+ logger.info('HTTP server listening on '+cfg.port);
  if(cfg.publicUrl){
-  await bot.setWebHook(cfg.publicUrl.replace(/\/$/,'')+path,{allowed_updates:['message','channel_post','callback_query','message_reaction','message_reaction_count']});
+  const webhookUrl=cfg.publicUrl.replace(/\/$/,'')+path;
+  try{
+   const result=await bot.setWebHook(webhookUrl,{allowed_updates:allowedUpdates});
+   logger.info('Telegram webhook configured',{url:webhookUrl,result,allowedUpdates});
+  }catch(e){
+   logger.error('Telegram webhook setup failed: '+(e.message||e));
+   throw e;
+  }
   try{
    const wh=await bot.getWebHookInfo();
-   logger.info('Telegram webhook ready',{url:wh.url||'',pending:wh.pending_update_count||0,allowed:wh.allowed_updates||[],lastError:wh.last_error_message||null});
-   if(wh.url!==cfg.publicUrl.replace(/\/$/,'')+path)logger.warn('Telegram webhook URL mismatch');
-   if(Array.isArray(wh.allowed_updates)&&!wh.allowed_updates.includes('message_reaction'))logger.warn('Telegram webhook is missing message_reaction');
-  }catch(e){logger.warn('Unable to verify Telegram webhook: '+(e.message||e));}
-}else{
-  logger.warn('PUBLIC_URL is not configured; Telegram message_reaction updates cannot reach this webhook.');
-}
- const server=app.listen(cfg.port,()=>logger.info('HTTP server listening on '+cfg.port));
+   const actualAllowed=Array.isArray(wh.allowed_updates)?wh.allowed_updates:[];
+   logger.info('Telegram webhook ready',{
+    url:wh.url||'',
+    pending:wh.pending_update_count||0,
+    allowed:actualAllowed,
+    lastError:wh.last_error_message||null
+   });
+   if(wh.url!==webhookUrl)logger.warn('Telegram webhook URL mismatch');
+   if(!actualAllowed.includes('message_reaction'))logger.warn('Telegram webhook is missing message_reaction');
+   if(!actualAllowed.includes('message_reaction_count'))logger.warn('Telegram webhook is missing message_reaction_count');
+   if(wh.last_error_message)logger.warn('Telegram reports a previous webhook delivery error; verify /health and the POST endpoint before treating this as a current failure.');
+  }catch(e){
+   logger.warn('Unable to verify Telegram webhook: '+(e.message||e));
+  }
+ }else{
+  logger.warn('PUBLIC_URL is not configured; Telegram reaction updates cannot reach this webhook.');
+ }
  async function saveUser(f){if(!f)return;await User.updateOne({id:String(f.id)},{$set:{username:f.username||'',firstName:f.first_name||'',lastName:f.last_name||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
  async function saveGroup(c){if(!c||!['group','supergroup'].includes(c.type))return;await Group.updateOne({id:String(c.id)},{$set:{title:c.title||'',type:c.type,username:c.username||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
  async function handleUpdate(u){if(u.callback_query)return callback(u.callback_query);if(u.message_reaction)return reactionUpdate(u.message_reaction);if(u.message_reaction_count)return reactionCountUpdate(u.message_reaction_count);const m=u.message||u.channel_post;if(u.message?.text?.startsWith('/')){if(m?.from)await saveUser(m.from);if(m?.chat)await saveGroup(m.chat);return command(u.message);}if(u.channel_post){if(m?.chat)await saveGroup(m.chat);return channelPost(u.channel_post);}if(m?.reply_to_message)return comment(m);}
