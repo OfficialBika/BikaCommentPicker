@@ -20,6 +20,7 @@ This file documents the isolated V2 Pro development line. The V1 main branch rem
 - /broadcast
 - /pickwinner [count]
 - /pickstarwinner [count] — paid Telegram Star (⭐) reactors only
+- /starstatus — inspect tracked Paid Star users, anonymous Star counts, and webhook reaction health
 - /reroll [count]
 - /winnerlist [page]
 - /giveaway (guided setup)
@@ -40,17 +41,17 @@ MongoDB's aggregation $sample can fall back to reading and randomly sorting the 
 
 ## Paid Star reaction picker
 
-V2 Pro supports a dedicated `/pickstarwinner` flow for Telegram's paid Star reaction (`ReactionTypePaid`). The bot subscribes to `message_reaction` updates and persists each non-anonymous user's paid-reaction state per giveaway/channel post. The Star picker uses a streaming reservoir sampler, excludes previous winners, and re-checks selected reactors before finalizing the round.
+V2 Pro supports a dedicated `/pickstarwinner` flow for Telegram's paid Star reaction (`ReactionTypePaid`). The bot subscribes to both `message_reaction` and `message_reaction_count` updates. It persists each non-anonymous user's paid-reaction state per giveaway/channel post and records the latest anonymous paid-Star count for diagnostics. The Star picker uses a streaming reservoir sampler, excludes previous winners, and re-checks selected reactors before finalizing the round.
 
 ### Required Telegram setup
 
 - The bot must be an administrator in the giveaway channel so Telegram can deliver `message_reaction` updates.
-- The webhook explicitly subscribes to `message_reaction`; Telegram's default allowed-updates list excludes reaction updates.
+- The webhook explicitly subscribes to `message_reaction` and `message_reaction_count`; Telegram's default allowed-updates list excludes reaction updates.
 - Paid Star reactions are identified by reaction type `paid`, not by the ordinary ⭐ emoji.
 
 ### Important limitation
 
-The Bot API does not provide a method for a bot to backfill the complete historical list of paid-Star reactors on a channel post. Therefore, only paid reactions observed through `message_reaction` updates are tracked. Telegram keeps pending updates only temporarily, so the bot should be online before the giveaway's reaction period begins. Anonymous paid reactions do not expose a user ID and cannot be selected as an individual winner.
+The Bot API does not provide a method for a bot to backfill the complete historical list of paid-Star reactors on a channel post. Therefore, only paid reactions observed through `message_reaction` updates are tracked. Telegram keeps pending updates only temporarily, so the bot should be online before the giveaway's reaction period begins. Anonymous paid reactions do not expose a user ID and cannot be selected as an individual winner. Their latest aggregate count is shown by `/starstatus` so a mismatch between visible Stars and identifiable candidates is immediately diagnosable.
 
 ### Usage
 
