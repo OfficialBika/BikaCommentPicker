@@ -20,7 +20,8 @@ This file documents the isolated V2 Pro development line. The V1 main branch rem
 - /broadcast
 - /pickwinner [count]
 - /pickstarwinner [count] — paid Telegram Star (⭐) reactors only
-- /starstatus — inspect tracked Paid Star users, anonymous Star counts, and webhook reaction health
+- /starstatus — inspect tracked Paid Star users, Star counts, MTProto sync, and webhook reaction health
+- /starsync — manually sync the channel post's Paid Star leaderboard into MongoDB
 - /reroll [count]
 - /winnerlist [page]
 - /giveaway (guided setup)
@@ -49,9 +50,19 @@ V2 Pro supports a dedicated `/pickstarwinner` flow for Telegram's paid Star reac
 - The webhook explicitly subscribes to `message_reaction` and `message_reaction_count`; Telegram's default allowed-updates list excludes reaction updates.
 - Paid Star reactions are identified by reaction type `paid`, not by the ordinary ⭐ emoji.
 
-### Important limitation
+### Historical Paid Star sync
 
-The Bot API does not provide a method for a bot to backfill the complete historical list of paid-Star reactors on a channel post. Therefore, only paid reactions observed through `message_reaction` updates are tracked. Telegram keeps pending updates only temporarily, so the bot should be online before the giveaway's reaction period begins. Anonymous paid reactions do not expose a user ID and cannot be selected as an individual winner. Their latest aggregate count is shown by `/starstatus` so a mismatch between visible Stars and identifiable candidates is immediately diagnosable.
+The Bot API webhook remains the real-time tracking path. In addition, V2 Pro can use Telegram's MTProto `messages.getMessagesReactions` through GramJS to read the Paid Star leaderboard for an existing channel post. This allows a giveaway that already has Paid Stars before the bot started tracking them to be synchronized before `/pickstarwinner`.
+
+Configure these Render environment variables:
+
+- `TG_API_ID` — Telegram API ID from my.telegram.org
+- `TG_API_HASH` — Telegram API hash
+- `BOT_TOKEN` — the same bot token already used by V2 Pro
+
+The MTProto client authenticates as the bot and reads the post's Paid Star leaderboard. Telegram's MTProto documentation exposes the leaderboard through `messages.getMessagesReactions`; anonymous leaderboard entries remain unidentifiable and are not eligible for individual winner selection.
+
+Use `/starsync` to force a sync, or simply run `/pickstarwinner`; the picker automatically attempts an MTProto sync first and then uses the normal live-tracking records. If MTProto is not configured, the picker falls back to Bot API tracking.
 
 ### Usage
 
@@ -60,3 +71,12 @@ Reply to the giveaway's channel-post discussion message and run:
 `/pickstarwinner 3`
 
 This selects three unique users whose paid Star reaction is currently active. If a selected user removes the paid reaction before the final eligibility check, the picker replaces them when possible. If the giveaway was previously picked using paid Stars, the existing `/reroll` command remains restricted to active paid-Star reactors.
+
+### Paid Star MTProto configuration
+
+```text
+TG_API_ID=your_telegram_api_id
+TG_API_HASH=your_telegram_api_hash
+```
+
+These are application credentials, not the bot token. Keep `TG_API_HASH` private. The GramJS client uses the existing `BOT_TOKEN` to authenticate as the bot.
