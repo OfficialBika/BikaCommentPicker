@@ -220,11 +220,18 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   customEmoji('5224607267797606837','☄️')+' Secure random selection',
   customEmoji('5399850755337240950','⏳')+' Please wait...'
 ].join('\n'),{parse_mode:'HTML',reply_to_message_id:m.message_id});
-   let lastEdit=0;
-   const r=await pickStarWinners(g._id,n,{durationSeconds:cfg.rollDurationSeconds,onProgress:async state=>{
-    const now=Date.now();if(now-lastEdit<850&&state.ratio<0.99)return;lastEdit=now;
-    const percent=Math.round(state.ratio*100),filled=Math.round(state.ratio*10);
-    const text=[
+   const barSize=10;
+   const rollStepMs=2000;
+   let nextStep=1;
+   let nextEditAt=Date.now()+rollStepMs;
+   let latestCandidates='Preparing...';
+   const r=await pickStarWinners(g._id,n,{durationSeconds:20,onProgress:async state=>{
+    latestCandidates=state.candidateCount;
+    const now=Date.now();
+    while(nextStep<=barSize&&now>=nextEditAt){
+     const filled=nextStep++;
+     nextEditAt+=rollStepMs;
+     const text=[
   customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>',
   '━━━━━━━━━━━━━━',
   '',
@@ -237,8 +244,25 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   customEmoji('5224607267797606837','☄️')+' Secure random selection',
   customEmoji('5399850755337240950','⏳')+' Please wait...'
 ].join('\n');
-    try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
+     try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
+    }
    }});
+   if(nextStep<=barSize){
+    const text=[
+     customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>',
+     '━━━━━━━━━━━━━━',
+     '',
+     customEmoji('5314336934271663511','🌟')+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 WINNERS...</b>',
+     progress(barSize,barSize),
+     '',
+     customEmoji('5260547274957672345','🎲')+' Round <b>1</b>',
+     customEmoji('5985525762973768278','👥')+' Candidates: <b>'+latestCandidates+'</b>',
+     customEmoji('4978994451964757181','🎖️')+' Winners: <b>'+n+'</b>',
+     customEmoji('5224607267797606837','☄️')+' Secure random selection',
+     customEmoji('5399850755337240950','⏳')+' Please wait...'
+    ].join('\n');
+    try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
+   }
    const lines=r.winners.map((w,i)=>customEmoji('5150415989841593609','🎖️')+' <b>#'+(i+1)+'</b>  '+winnerDisplay(w));
    const header=customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>\n━━━━━━━━━━━━━━━\n\n'+customEmoji('5461151367559141950','🎉')+' <b>𝐖𝐈𝐍𝐍𝐄𝐑𝐒 𝐒𝐄𝐋𝐄𝐂𝐓𝐄𝐃</b>\n\n';
    const stats=customEmoji('5444856076954520455','🧾')+' Post ID        <b>'+esc(g.channelPostId)+'</b>\n'+customEmoji('5280816565657300091','🎲')+' Round          <b>'+r.winners[0].round+'</b>\n'+customEmoji('4978994451964757181','🎖️')+' Winners        <b>'+r.winners.length+'</b>\n'+customEmoji('6129931368148243023','⚡')+' Active Stars   <b>'+r.candidateCount+'</b>\n\n';
