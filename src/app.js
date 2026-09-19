@@ -130,7 +130,19 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
     const winnerEmoji=customEmoji('4978994451964757181','🎖️');
     const secureEmoji=customEmoji('5224607267797606837','☄️');
     const waitEmoji=customEmoji('5399850755337240950','⏳');
-    const renderRolling=(filled,candidates)=>rollTitle+'\n━━━━━━━━━━━━━━\n\n'+selectEmoji+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 𝐖𝐈𝐍𝐍𝐄𝐑𝐒...</b>\n'+progress(filled,barSize)+'\n\n'+roundEmoji+' Round <b>1</b>\n'+candidateEmoji+' Candidates: <b>'+candidates+'</b>\n'+winnerEmoji+' Winners: <b>'+n+'</b>\n'+secureEmoji+' Secure random selection\n'+waitEmoji+' Please wait...';
+    const renderRolling=(filled,candidates)=>[
+  rollTitle,
+  '━━━━━━━━━━━━━━',
+  '',
+  selectEmoji+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 𝐖𝐈𝐍𝐍𝐄𝐑𝐒...</b>',
+  progress(filled,barSize),
+  '',
+  roundEmoji+' Round <b>1</b>',
+  candidateEmoji+' Candidates: <b>'+candidates+'</b>',
+  winnerEmoji+' Winners: <b>'+n+'</b>',
+  secureEmoji+' Secure random selection',
+  waitEmoji+' Please wait...'
+].join('\n');
     p=await bot.sendMessage(m.chat.id,renderRolling(0,'Preparing...'),{parse_mode:'HTML',reply_to_message_id:m.message_id});
     let nextStep=1;
     let nextEditAt=Date.now()+rollStepMs;
@@ -191,12 +203,36 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(n>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per pick is '+cfg.pickCountMax+'.');
   const star='⭐';let p;
   try{
-   p=await bot.sendMessage(m.chat.id,star+' <b>CMT PICKER · PAID STAR</b>\n\n'+progress(0,10)+' <b>DRAWING…</b>\n\n⭐ Preparing active paid Star reactors…\n🔐 Secure random selection\n\n<i>Please wait…</i>',{parse_mode:'HTML',reply_to_message_id:m.message_id});
+   p=await bot.sendMessage(m.chat.id,[
+  customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>',
+  '━━━━━━━━━━━━━━',
+  '',
+  customEmoji('5314336934271663511','🌟')+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 WINNERS...</b>',
+  progress(0,10),
+  '',
+  customEmoji('5260547274957672345','🎲')+' Round <b>1</b>',
+  customEmoji('5985525762973768278','👥')+' Candidates: <b>Preparing...</b>',
+  customEmoji('4978994451964757181','🎖️')+' Winners: <b>'+n+'</b>',
+  customEmoji('5224607267797606837','☄️')+' Secure random selection',
+  customEmoji('5399850755337240950','⏳')+' Please wait...'
+].join('\n'),{parse_mode:'HTML',reply_to_message_id:m.message_id});
    let lastEdit=0;
    const r=await pickStarWinners(g._id,n,{durationSeconds:cfg.rollDurationSeconds,onProgress:async state=>{
     const now=Date.now();if(now-lastEdit<850&&state.ratio<0.99)return;lastEdit=now;
     const percent=Math.round(state.ratio*100),filled=Math.round(state.ratio*10);
-    const text=star+' <b>CMT PICKER · PAID STAR</b>\n\n'+progress(filled,10)+' <b>DRAWING '+percent+'%</b>\n\n⭐ <b>'+state.candidateCount+'</b> active paid Star reactors\n🔐 Secure random selection\n\n<i>Please wait while the draw is in progress…</i>';
+    const text=[
+  customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>',
+  '━━━━━━━━━━━━━━',
+  '',
+  customEmoji('5314336934271663511','🌟')+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 WINNERS...</b>',
+  progress(filled,10),
+  '',
+  customEmoji('5260547274957672345','🎲')+' Round <b>1</b>',
+  customEmoji('5985525762973768278','👥')+' Candidates: <b>'+state.candidateCount+'</b>',
+  customEmoji('4978994451964757181','🎖️')+' Winners: <b>'+n+'</b>',
+  customEmoji('5224607267797606837','☄️')+' Secure random selection',
+  customEmoji('5399850755337240950','⏳')+' Please wait...'
+].join('\n');
     try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
    }});
    const lines=r.winners.map((w,i)=>customEmoji('5150415989841593609','🎖️')+' <b>#'+(i+1)+'</b>  '+winnerDisplay(w));
