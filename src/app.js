@@ -8,11 +8,13 @@ const {User,Group,Giveaway,Entry,PaidReaction,Winner,BroadcastJob,AuditEvent}=re
 const {pickWinners,reroll,rerollStarWinners,pickStarWinners}=require('./services/picker');
 const {recordComment}=require('./services/entry');
 const {runBroadcast}=require('./services/broadcast');
+const {createPaidStarClient,syncPaidStarReactors,paidStarMtStatus}=require('./services/paidStars');
 
 async function start(){
  const cfg=loadConfig();const logger=createLogger(cfg.logLevel);
  await mongoose.connect(cfg.mongoUri,{serverSelectionTimeoutMS:10000});logger.info('MongoDB connected');
  const bot=new TelegramBot(cfg.botToken);const app=express();app.use(express.json({limit:'1mb'}));
+ const paidStarClient=await createPaidStarClient(cfg,logger);
  app.get('/',(_,res)=>res.type('text').send('Cmt Picker V2 Pro is running.'));
  app.get('/health',(_,res)=>res.json({ok:true,status:'healthy',uptime:process.uptime(),mongo:mongoose.connection.readyState===1}));
  app.get('/ready',(_,res)=>res.status(mongoose.connection.readyState===1?200:503).json({ok:mongoose.connection.readyState===1}));
@@ -326,7 +328,15 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
    let nextStep=1;
    let nextEditAt=Date.now()+rollStepMs;
    let latestCandidates='Preparing...';
-   const r=await pickStarWinners(g._id,n,{durationSeconds:20,onProgress:async state=>{
+   if(paidStarClient){
+      try{
+       const sync=await syncPaidStarReactors(paidStarClient,g,{logger});
+       if(sync.synced>0)logger.info('Paid Star MTProto sync completed',{giveawayId:String(g._id),synced:sync.synced,total:sync.total});
+      }catch(syncError){
+       logger.warn('Paid Star MTProto sync failed; continuing with live Bot API tracking: '+(syncError.message||syncError));
+      }
+    }
+    const r=await pickStarWinners(g._id,n,{durationSeconds:20,onProgress:async state=>{
     latestCandidates=state.candidateCount;
     const now=Date.now();
     while(nextStep<=barSize&&now>=nextEditAt){
@@ -385,6 +395,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');
   const g=await findGiveaway(m);
   if(!g)return bot.sendMessage(m.chat.id,'No giveaway found. Reply to the giveaway post.');
+  let mtStatus=paidStarMtStatus(paidStarClient);
   const [active,inactive]=await Promise.all([
    PaidReaction.countDocuments({giveawayId:g._id,active:true}),
    PaidReaction.countDocuments({giveawayId:g._id,active:false})
@@ -395,7 +406,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
    const wh=await bot.getWebHookInfo();
    webhook=wh.url?'🟢 Connected':'🔴 Not configured';
    const allowed=Array.isArray(wh.allowed_updates)?wh.allowed_updates:[];
-   webhookDetail='Reaction: '+(allowed.includes('message_reaction')?'🟢':'🔴')+'  Anonymous count: '+(allowed.includes('message_reaction_count')?'🟢':'🔴');
+   webhookDetail='Reaction: '+(allowed.includes('message_reaction')?'🟢':'🔴')+'  Anonymous count: '+(allowed.includes('message_reaction_count')?'🟢':'🔴')+'\nMTProto Star Sync: '+(mtStatus.enabled?'🟢 Enabled':'🔴 Disabled');
    if(wh.last_error_message)webhookDetail+='\nLast error: '+esc(wh.last_error_message);
   }catch(e){webhookDetail='Webhook check failed: '+esc(e.message||String(e));}
   const last=g.lastReactionUpdateAt?new Date(g.lastReactionUpdateAt).toISOString():'Never';
@@ -419,6 +430,6 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
  }
  async function broadcast(m,text){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');if(!text)return bot.sendMessage(m.chat.id,'Usage: /broadcast your message');const groups=await Group.find({approved:true}).select('id').lean();const job=await BroadcastJob.create({text,createdBy:String(m.from.id),targets:groups.map(g=>({chatId:g.id,status:'pending',attempts:0}))});await bot.sendMessage(m.chat.id,'📣 Broadcast queued\nJob: <code>'+job._id+'</code>\nTargets: '+groups.length,{parse_mode:'HTML'});runBroadcast(bot,job._id,cfg,logger).catch(e=>logger.error('broadcast',e));}
  async function callback(q){try{await bot.answerCallbackQuery(q.id);}catch{}}
- const shutdown=async()=>{logger.info('graceful shutdown');server.close();await mongoose.disconnect().catch(()=>{});process.exit(0);};process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);return {app,bot,server};
+ const shutdown=async()=>{logger.info('graceful shutdown');server.close();await paidStarClient?.disconnect?.().catch(()=>{});await mongoose.disconnect().catch(()=>{});process.exit(0);};process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);return {app,bot,server};
 }
 module.exports={start};
