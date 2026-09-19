@@ -53,8 +53,9 @@ async function syncPaidStarReactors(client,g,{logger}={}){
  const postId=Number(g.channelPostId||0);
  if(!channelId||!Number.isInteger(postId)||postId<1)throw new Error('Giveaway is missing channelId/channelPostId.');
 
+ const peer=await client.getEntity(channelId);
  const result=await client.invoke(new Api.messages.GetMessagesReactions({
-  peer:channelId,
+  peer,
   id:[postId]
  }));
 
