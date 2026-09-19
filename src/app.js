@@ -79,7 +79,11 @@ async function start(){
  }
  async function comment(m){if(!['group','supergroup'].includes(m.chat.type))return;const g=await findGiveaway(m);if(g?.status==='active'){if(!g.discussionChatId){g.discussionChatId=String(m.chat.id);await g.save();}await recordComment(g,m);}}
 function customEmoji(id,fallback){return '<tg-emoji emoji-id="'+esc(id)+'">'+fallback+'</tg-emoji>';}
-function winnerDisplay(w){return w.username?'@'+esc(w.username):esc([w.firstName,w.lastName].filter(Boolean).join(' ')||'User');}
+function winnerDisplay(w){
+ const name=[w.firstName,w.lastName].filter(Boolean).join(' ')||w.username||'User';
+ if(w.username)return '@'+esc(w.username);
+ return w.userId?'<a href="tg://user?id='+esc(w.userId)+'">'+esc(name)+'</a>':esc(name);
+}
 function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.some(r=>r&&r.type==='paid');}
  async function reactionUpdate(r){
   if(!r?.chat?.id||!r.message_id||!r.user?.id)return;
