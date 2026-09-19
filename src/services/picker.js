@@ -46,12 +46,22 @@ async function selectRandomEntries(giveawayId,count,blockedIds){
 }
 
 async function pickWinners(id,count,options={}){
+ const current=await Giveaway.findById(id);
+ if(!current)throw new Error('Giveaway not found.');
+ if(current.status==='completed'){
+  const latest=await Winner.find({giveawayId:id,round:current.pickRound}).select('selectionMode').lean();
+  if(!latest.length||latest.some(w=>w.selectionMode!=='paid_star')){
+   throw new Error('Giveaway is already completed. A normal comment draw can only be run after a Paid Star draw.');
+  }
+ }else if(current.status!=='active'){
+  throw new Error('Giveaway is not active or is already being picked.');
+ }
  const g=await Giveaway.findOneAndUpdate(
-  {_id:id,status:'active'},
+  {_id:id,status:current.status},
   {$set:{status:'picking',pickedAt:null},$inc:{stateVersion:1}},
   {new:true}
  );
- if(!g)throw new Error('Giveaway is not active or is already being picked.');
+ if(!g)throw new Error('Giveaway state changed. Please try the pick again.');
 
  try{
   const prior=await Winner.find({giveawayId:id}).select('userId').lean();
