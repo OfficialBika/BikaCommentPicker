@@ -18,11 +18,21 @@ async function start(){
  app.get('/ready',(_,res)=>res.status(mongoose.connection.readyState===1?200:503).json({ok:mongoose.connection.readyState===1}));
  const path='/telegram/comments_picker_v2_webhook';
  app.post(path,async(req,res)=>{res.sendStatus(200);try{await handleUpdate(req.body);}catch(e){logger.error('update error',e.stack||e.message);}});
- if(cfg.publicUrl)await bot.setWebHook(cfg.publicUrl.replace(/\/$/,'')+path,{allowed_updates:['message','channel_post','callback_query','message_reaction']});
+ if(cfg.publicUrl){
+  await bot.setWebHook(cfg.publicUrl.replace(/\/$/,'')+path,{allowed_updates:['message','channel_post','callback_query','message_reaction','message_reaction_count']});
+  try{
+   const wh=await bot.getWebHookInfo();
+   logger.info('Telegram webhook ready',{url:wh.url||'',pending:wh.pending_update_count||0,allowed:wh.allowed_updates||[],lastError:wh.last_error_message||null});
+   if(wh.url!==cfg.publicUrl.replace(/\/$/,'')+path)logger.warn('Telegram webhook URL mismatch');
+   if(Array.isArray(wh.allowed_updates)&&!wh.allowed_updates.includes('message_reaction'))logger.warn('Telegram webhook is missing message_reaction');
+  }catch(e){logger.warn('Unable to verify Telegram webhook: '+(e.message||e));}
+}else{
+  logger.warn('PUBLIC_URL is not configured; Telegram message_reaction updates cannot reach this webhook.');
+}
  const server=app.listen(cfg.port,()=>logger.info('HTTP server listening on '+cfg.port));
  async function saveUser(f){if(!f)return;await User.updateOne({id:String(f.id)},{$set:{username:f.username||'',firstName:f.first_name||'',lastName:f.last_name||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
  async function saveGroup(c){if(!c||!['group','supergroup'].includes(c.type))return;await Group.updateOne({id:String(c.id)},{$set:{title:c.title||'',type:c.type,username:c.username||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
- async function handleUpdate(u){if(u.callback_query)return callback(u.callback_query);if(u.message_reaction)return reactionUpdate(u.message_reaction);const m=u.message||u.channel_post;if(u.message?.text?.startsWith('/')){if(m?.from)await saveUser(m.from);if(m?.chat)await saveGroup(m.chat);return command(u.message);}if(u.channel_post){if(m?.chat)await saveGroup(m.chat);return channelPost(u.channel_post);}if(m?.reply_to_message)return comment(m);}
+ async function handleUpdate(u){if(u.callback_query)return callback(u.callback_query);if(u.message_reaction)return reactionUpdate(u.message_reaction);if(u.message_reaction_count)return reactionCountUpdate(u.message_reaction_count);const m=u.message||u.channel_post;if(u.message?.text?.startsWith('/')){if(m?.from)await saveUser(m.from);if(m?.chat)await saveGroup(m.chat);return command(u.message);}if(u.channel_post){if(m?.chat)await saveGroup(m.chat);return channelPost(u.channel_post);}if(m?.reply_to_message)return comment(m);}
  async function channelPost(p){const text=p.text||p.caption||'';if(!text.toLowerCase().includes(cfg.mentionTag.toLowerCase()))return;await Giveaway.findOneAndUpdate({channelId:String(p.chat.id),channelPostId:p.message_id},{$setOnInsert:{channelId:String(p.chat.id),channelPostId:p.message_id,title:text.slice(0,120),status:'active',winnerCount:1,durationSeconds:cfg.rollDurationSeconds,createdAt:new Date()}},{upsert:true,new:true});}
  function extractChannelOrigin(msg){
   const r=msg?.reply_to_message;
@@ -86,18 +96,78 @@ function winnerDisplay(w){
 }
 function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.some(r=>r&&r.type==='paid');}
  async function reactionUpdate(r){
-  if(!r?.chat?.id||!r.message_id||!r.user?.id)return;
-  const g=await Giveaway.findOne({channelId:String(r.chat.id),channelPostId:r.message_id});
-  if(!g)return;
+  const channelId=r?.chat?.id!=null?String(r.chat.id):'';
+  const postId=Number(r?.message_id||0);
+  if(!channelId||!Number.isInteger(postId)||postId<1)return;
+
+  const g=await Giveaway.findOne({channelId,channelPostId:postId});
+  if(!g){
+   await AuditEvent.create({
+    action:'paid_star_reaction_orphan',
+    actorId:r.user?.id!=null?String(r.user.id):'anonymous',
+    targetId:String(postId),
+    meta:{channelId,hasUser:!!r.user,hasPaidReaction:hasPaidReaction(r.new_reaction)}
+   }).catch(()=>{});
+   return;
+  }
+
+  const now=new Date();
+  await Giveaway.updateOne({_id:g._id},{$set:{lastReactionUpdateAt:now}}).catch(()=>{});
+
+  // Telegram omits user for anonymous reactions and supplies actor_chat instead.
+  // Anonymous reactions are counted for diagnostics, but cannot be selected as
+  // individual winners because there is no Telegram user ID to persist.
+  if(!r.user?.id){
+   await AuditEvent.create({
+    action:hasPaidReaction(r.new_reaction)?'paid_star_anonymous_reaction':'anonymous_reaction_changed',
+    actorId:'anonymous',
+    giveawayId:g._id,
+    targetId:String(postId),
+    meta:{channelId,actorChatId:r.actor_chat?.id!=null?String(r.actor_chat.id):null}
+   }).catch(()=>{});
+   return;
+  }
+
   const active=hasPaidReaction(r.new_reaction);
   const user=r.user;
   await PaidReaction.findOneAndUpdate(
    {giveawayId:g._id,userId:String(user.id)},
-   {$set:{channelId:String(r.chat.id),channelPostId:r.message_id,userId:String(user.id),username:user.username||'',firstName:user.first_name||'',lastName:user.last_name||'',active,lastReactionAt:new Date()}},
+   {$set:{
+    channelId,channelPostId:postId,userId:String(user.id),
+    username:user.username||'',firstName:user.first_name||'',lastName:user.last_name||'',
+    active,lastReactionAt:now
+   }},
    {upsert:true,new:true}
   );
-  if(active)await saveUser(user);
-  await AuditEvent.create({action:active?'paid_star_reaction_added':'paid_star_reaction_removed',actorId:String(user.id),giveawayId:g._id,targetId:String(r.message_id),meta:{channelId:String(r.chat.id)}}).catch(()=>{});
+  await saveUser(user);
+  await AuditEvent.create({
+   action:active?'paid_star_reaction_added':'paid_star_reaction_removed',
+   actorId:String(user.id),giveawayId:g._id,targetId:String(postId),
+   meta:{channelId,oldPaidReaction:hasPaidReaction(r.old_reaction),newPaidReaction:active}
+  }).catch(()=>{});
+ }
+ async function reactionCountUpdate(r){
+  const channelId=r?.chat?.id!=null?String(r.chat.id):'';
+  const postId=Number(r?.message_id||0);
+  if(!channelId||!Number.isInteger(postId)||postId<1)return;
+  const g=await Giveaway.findOne({channelId,channelPostId:postId});
+  if(!g)return;
+
+  const paid=r.reactions?.find(x=>x?.type==='paid');
+  const anonymousPaidStarCount=Number(paid?.total_count||0);
+  const now=new Date();
+  await Giveaway.updateOne({_id:g._id},{$set:{
+   anonymousPaidStarCount,
+   anonymousPaidStarCountUpdatedAt:now,
+   lastReactionUpdateAt:now
+  }}).catch(()=>{});
+  await AuditEvent.create({
+   action:'paid_star_anonymous_count_updated',
+   actorId:'telegram',
+   giveawayId:g._id,
+   targetId:String(postId),
+   meta:{channelId,anonymousPaidStarCount}
+  }).catch(()=>{});
  }
  async function owner(id){return cfg.ownerId&&String(id)===cfg.ownerId;}
  async function admin(m){if(await owner(m.from.id))return true;if(!['group','supergroup'].includes(m.chat.type))return false;try{const x=await bot.getChatMember(m.chat.id,m.from.id);return ['administrator','creator'].includes(x.status);}catch{return false;}}
@@ -111,6 +181,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(cmd==='/pickstarwinner')return pickStar(m,parts[1]);
   if(cmd==='/reroll')return rerollCmd(m,parts[1]);
   if(cmd==='/winnerlist')return winnerList(m);
+  if(cmd==='/starstatus')return starStatus(m);
   if(cmd==='/broadcast')return broadcast(m,parts.slice(1).join(' '));
  }
  async function createGiveaway(m,countArg,keyword){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');const r=m.reply_to_message;if(!r)return bot.sendMessage(m.chat.id,'Reply to the forwarded channel giveaway post. Usage: /giveaway 3 optional-keyword');const origin=extractChannelOrigin(m);const postId=origin?.channelPostId||r.forward_from_message_id||r.message_id;const channelId=origin?.channelId||String(r.forward_from_chat?.id||r.chat?.id||'');const rawCount=Number(countArg||1);if(!Number.isInteger(rawCount)||rawCount<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.');if(rawCount>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per giveaway is '+cfg.pickCountMax+'.');const count=rawCount;const g=await Giveaway.findOneAndUpdate({channelId,channelPostId:postId},{$set:{discussionChatId:String(m.chat.id),winnerCount:count,rules:{keyword:keyword||undefined,requireUsername:false,requireBotStart:false,excludeAdmins:true}},$setOnInsert:{title:(r.text||r.caption||'Giveaway').slice(0,120),status:'active',durationSeconds:cfg.rollDurationSeconds,createdBy:String(m.from.id),createdAt:new Date()}},{upsert:true,new:true});await bot.sendMessage(m.chat.id,'🎁 <b>GIVEAWAY CONFIGURED</b>\n\nID: <code>'+g._id+'</code>\nWinners: <b>'+count+'</b>\nKeyword: <b>'+esc(keyword||'None')+'</b>\n\nComments replying to this post are collected automatically.',{parse_mode:'HTML'});await AuditEvent.create({action:'create_giveaway',actorId:String(m.from.id),giveawayId:g._id,meta:{count,keyword:keyword||null}});}
@@ -273,6 +344,42 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
  }
  async function rerollCmd(m,arg){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');const g=await findGiveaway(m,arg);if(!g)return bot.sendMessage(m.chat.id,'No giveaway found.');const raw=Number(arg||g.winnerCount||1);if(!Number.isInteger(raw)||raw<1)return bot.sendMessage(m.chat.id,'❌ Reroll count must be a whole number greater than 0.');if(raw>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per reroll is '+cfg.pickCountMax+'.');const n=raw;try{const latestWinner=await Winner.findOne({giveawayId:g._id,status:'winner'}).sort({round:-1}).lean();const r=latestWinner?.selectionMode==='paid_star'?await rerollStarWinners(g._id,n):await reroll(g._id,n);const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));await bot.sendMessage(m.chat.id,'🔄 <b>REROLL COMPLETE</b> · ROUND '+r.round+'\n\n'+lines.join('\n')+'\n\n🔐 <i>Previous winners are excluded from this draw.</i>',{parse_mode:'HTML',reply_to_message_id:m.message_id});await AuditEvent.create({action:'reroll',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n,round:r.round}});}catch(e){await bot.sendMessage(m.chat.id,'⚠️ <b>REROLL FAILED</b>\n\n'+esc(e.message),{parse_mode:'HTML',reply_to_message_id:m.message_id});}}
  async function winnerList(m){const parts=(m.text||'').trim().split(/\s+/);const g=await findGiveaway(m,parts[1]);if(!g)return bot.sendMessage(m.chat.id,'No giveaway found.');const rows=await Winner.find({giveawayId:g._id,status:'winner'}).sort({round:-1,rank:1}).limit(20).lean();if(!rows.length)return bot.sendMessage(m.chat.id,'No active winners found.');return bot.sendMessage(m.chat.id,'🏆 <b>WINNER HISTORY</b>\n\n'+rows.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username})+' — Round '+w.round).join('\n'),{parse_mode:'HTML'});}
+ async function starStatus(m){
+  if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');
+  const g=await findGiveaway(m);
+  if(!g)return bot.sendMessage(m.chat.id,'No giveaway found. Reply to the giveaway post.');
+  const [active,inactive]=await Promise.all([
+   PaidReaction.countDocuments({giveawayId:g._id,active:true}),
+   PaidReaction.countDocuments({giveawayId:g._id,active:false})
+  ]);
+  let webhook='Not verified';
+  let webhookDetail='';
+  try{
+   const wh=await bot.getWebHookInfo();
+   webhook=wh.url?'🟢 Connected':'🔴 Not configured';
+   const allowed=Array.isArray(wh.allowed_updates)?wh.allowed_updates:[];
+   webhookDetail='Reaction: '+(allowed.includes('message_reaction')?'🟢':'🔴')+'  Anonymous count: '+(allowed.includes('message_reaction_count')?'🟢':'🔴');
+   if(wh.last_error_message)webhookDetail+='\nLast error: '+esc(wh.last_error_message);
+  }catch(e){webhookDetail='Webhook check failed: '+esc(e.message||String(e));}
+  const last=g.lastReactionUpdateAt?new Date(g.lastReactionUpdateAt).toISOString():'Never';
+  const anon=Number(g.anonymousPaidStarCount||0);
+  const text=[
+   customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑 𝐒𝐓𝐀𝐓𝐔𝐒</b>',
+   '━━━━━━━━━━━━━━━',
+   '',
+   customEmoji('5985525762973768278','👥')+' Tracked Active: <b>'+active+'</b>',
+   '↩️ Tracked Inactive: <b>'+inactive+'</b>',
+   '👤 Anonymous Paid Stars: <b>'+anon+'</b>',
+   '🆔 Post ID: <b>'+esc(g.channelPostId)+'</b>',
+   '',
+   customEmoji('5224607267797606837','☄️')+' Webhook: <b>'+webhook+'</b>',
+   webhookDetail,
+   '🕒 Last Reaction Update: <b>'+esc(last)+'</b>',
+   '',
+   '💡 Only identifiable users can be selected as winners.'
+  ].join('\n');
+  return bot.sendMessage(m.chat.id,text,{parse_mode:'HTML',reply_to_message_id:m.message_id});
+ }
  async function broadcast(m,text){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');if(!text)return bot.sendMessage(m.chat.id,'Usage: /broadcast your message');const groups=await Group.find({approved:true}).select('id').lean();const job=await BroadcastJob.create({text,createdBy:String(m.from.id),targets:groups.map(g=>({chatId:g.id,status:'pending',attempts:0}))});await bot.sendMessage(m.chat.id,'📣 Broadcast queued\nJob: <code>'+job._id+'</code>\nTargets: '+groups.length,{parse_mode:'HTML'});runBroadcast(bot,job._id,cfg,logger).catch(e=>logger.error('broadcast',e));}
  async function callback(q){try{await bot.answerCallbackQuery(q.id);}catch{}}
  const shutdown=async()=>{logger.info('graceful shutdown');server.close();await mongoose.disconnect().catch(()=>{});process.exit(0);};process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);return {app,bot,server};
