@@ -77,17 +77,24 @@ async function syncPaidStarReactors(client,g,{logger}={}){
  for(const reactor of top){
   const u=userMap.get(reactor.id);
   if(!u)continue;
+  const existing=await PaidReaction.findOne({giveawayId:g._id,userId:reactor.id})
+   .select('manualOverride')
+   .lean();
+  const updateSet={
+   channelId,channelPostId:postId,userId:reactor.id,
+   username:u.username||'',
+   firstName:u.firstName||'',
+   lastName:u.lastName||'',
+   active:true,
+   lastReactionAt:new Date()
+  };
+  if(existing?.manualOverride!==true){
+   updateSet.starCount=Math.max(1,Math.min(100000,Number(reactor.count)||1));
+   updateSet.manualOverride=false;
+  }
   await PaidReaction.findOneAndUpdate(
    {giveawayId:g._id,userId:reactor.id},
-   {$set:{
-    channelId,channelPostId:postId,userId:reactor.id,
-    username:u.username||'',
-    firstName:u.firstName||'',
-    lastName:u.lastName||'',
-    active:true,
-    starCount:Math.max(1,Math.min(100000,Number(reactor.count)||1)),
-    lastReactionAt:new Date()
-   }},
+   {$set:updateSet,$setOnInsert:{starCount:Math.max(1,Math.min(100000,Number(reactor.count)||1)),manualOverride:false}},
    {upsert:true,new:true}
   );
   synced++;
