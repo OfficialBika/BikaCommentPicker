@@ -85,6 +85,7 @@ async function syncPaidStarReactors(client,g,{logger}={}){
     firstName:u.firstName||'',
     lastName:u.lastName||'',
     active:true,
+    starCount:Math.max(1,Math.min(100000,Number(reactor.count)||1)),
     lastReactionAt:new Date()
    }},
    {upsert:true,new:true}
