@@ -148,23 +148,51 @@ async function reroll(id,count){
 }
 
 
+function secureUnit(){
+ const n=crypto.randomBytes(6).readUIntBE(0,6);
+ return (n+1)/0x1000000000000;
+}
+
+/*
+ * Weighted sampling without replacement.
+ *
+ * Each active reactor is one candidate, while starCount is its weight.
+ * Efraimidis-Spirakis keys (log(U) / weight) give a weighted sample
+ * without duplicating database rows, so 10 Stars means exactly 10x the
+ * selection weight of 1 Star for the first draw.
+ */
 async function selectRandomPaidReactors(giveawayId,count,blockedIds){
  const filter={giveawayId,active:true};
  if(blockedIds?.size)filter.userId={$nin:[...blockedIds]};
  const cursor=PaidReaction.find(filter)
-  .select('userId username firstName lastName')
+  .select('userId username firstName lastName starCount')
   .lean()
   .cursor({batchSize:1000});
+
  const reservoir=[];
  let seen=0;
  try{
   for await(const reactor of cursor){
    seen++;
-   if(reservoir.length<count){reservoir.push(reactor);continue;}
-   const j=crypto.randomInt(seen);
-   if(j<count)reservoir[j]=reactor;
+   const weight=Math.max(1,Math.min(100000,Number(reactor.starCount)||1));
+   const key=Math.log(secureUnit())/weight;
+   const item={...reactor,starCount:weight,_weightKey:key};
+
+   if(reservoir.length<count){
+    reservoir.push(item);
+    continue;
+   }
+
+   let minIndex=0;
+   for(let i=1;i<reservoir.length;i++){
+    if(reservoir[i]._weightKey<reservoir[minIndex]._weightKey)minIndex=i;
+   }
+   if(key>reservoir[minIndex]._weightKey)reservoir[minIndex]=item;
   }
  }finally{await cursor.close().catch(()=>{});}
+
+ reservoir.sort((a,b)=>b._weightKey-a._weightKey);
+ reservoir.forEach(x=>delete x._weightKey);
  return {candidates:reservoir,candidateCount:seen};
 }
 
