@@ -8,11 +8,15 @@ const {User,Group,Giveaway,Entry,PaidReaction,Winner,BroadcastJob,AuditEvent}=re
 const {pickWinners,reroll,rerollStarWinners,pickStarWinners}=require('./services/picker');
 const {recordComment}=require('./services/entry');
 const {runBroadcast}=require('./services/broadcast');
+const {cleanupTemporaryGiveawayData}=require('./services/cleanup');
 const {createPaidStarClient,syncPaidStarReactors,paidStarMtStatus}=require('./services/paidStars');
 
 async function start(){
  const cfg=loadConfig();const logger=createLogger(cfg.logLevel);
  await mongoose.connect(cfg.mongoUri,{serverSelectionTimeoutMS:10000});logger.info('MongoDB connected');
+ await cleanupTemporaryGiveawayData({retentionDays:cfg.tempDataRetentionDays,logger}).catch(e=>logger.warn('Initial temporary-data cleanup failed: '+(e.message||e)));
+ const cleanupTimer=setInterval(()=>cleanupTemporaryGiveawayData({retentionDays:cfg.tempDataRetentionDays,logger}).catch(e=>logger.warn('Scheduled temporary-data cleanup failed: '+(e.message||e))),cfg.cleanupIntervalMinutes*60*1000);
+ cleanupTimer.unref?.();
  const bot=new TelegramBot(cfg.botToken);const app=express();app.use(express.json({limit:'1mb'}));
  const paidStarClient=await createPaidStarClient(cfg,logger);
  app.get('/',(_,res)=>res.type('text').send('Cmt Picker V2 Pro is running.'));
@@ -122,11 +126,12 @@ async function start(){
  async function comment(m){if(!['group','supergroup'].includes(m.chat.type))return;const g=await findGiveaway(m);if(g?.status==='active'){if(!g.discussionChatId){g.discussionChatId=String(m.chat.id);await g.save();}await recordComment(g,m);}}
 function customEmoji(id,fallback){return '<tg-emoji emoji-id="'+esc(id)+'">'+fallback+'</tg-emoji>';}
 function winnerDisplay(w){
- const name=[w.firstName,w.lastName].filter(Boolean).join(' ')||w.username||'User';
- // Keep winner output HTML-safe. Telegram HTML parsing is strict, so do not
- // build dynamic <a> tags from user-controlled winner data.
- if(w.username)return '@'+esc(w.username);
- return esc(name);
+ return mention({
+  id:w.userId,
+  firstName:w.firstName,
+  lastName:w.lastName,
+  username:w.username
+ });
 }
 function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.some(r=>r&&r.type==='paid');}
  async function reactionUpdate(r){
@@ -540,6 +545,6 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
  }
  async function broadcast(m,text){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');if(!text)return bot.sendMessage(m.chat.id,'Usage: /broadcast your message');const groups=await Group.find({approved:true}).select('id').lean();const job=await BroadcastJob.create({text,createdBy:String(m.from.id),targets:groups.map(g=>({chatId:g.id,status:'pending',attempts:0}))});await bot.sendMessage(m.chat.id,'📣 Broadcast queued\nJob: <code>'+job._id+'</code>\nTargets: '+groups.length,{parse_mode:'HTML'});runBroadcast(bot,job._id,cfg,logger).catch(e=>logger.error('broadcast',e));}
  async function callback(q){try{await bot.answerCallbackQuery(q.id);}catch{}}
- const shutdown=async()=>{logger.info('graceful shutdown');server.close();await paidStarClient?.disconnect?.().catch(()=>{});await mongoose.disconnect().catch(()=>{});process.exit(0);};process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);return {app,bot,server};
+ const shutdown=async()=>{logger.info('graceful shutdown');clearInterval(cleanupTimer);server.close();await paidStarClient?.disconnect?.().catch(()=>{});await mongoose.disconnect().catch(()=>{});process.exit(0);};process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);return {app,bot,server};
 }
 module.exports={start};
