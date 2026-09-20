@@ -214,8 +214,8 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
  async function owner(id){return cfg.ownerId&&String(id)===cfg.ownerId;}
  async function admin(m){if(await owner(m.from.id))return true;if(!['group','supergroup'].includes(m.chat.type))return false;try{const x=await bot.getChatMember(m.chat.id,m.from.id);return ['administrator','creator'].includes(x.status);}catch{return false;}}
  async function command(m){const parts=(m.text||'').trim().split(/\s+/);const cmd=(parts[0]||'').split('@')[0].toLowerCase();
-  if(cmd==='/start')return bot.sendMessage(m.chat.id,'🎟️ <b>CMT PICKER</b>\n\n<b>V2 PRO</b> · Secure Giveaway Engine\n\n🎁 <b>Giveaway Picker</b>\n⭐ <b>Paid Star Picker</b>\n🔄 <b>Reroll & Winner History</b>\n🛡️ <b>Admin-only Controls</b>\n\n<i>Ready to pick winners fairly and securely.</i>',{parse_mode:'HTML'});
-  if(cmd==='/approve'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');await Group.updateOne({id:String(m.chat.id)},{$set:{approved:true}},{upsert:true});return bot.sendMessage(m.chat.id,'✅ Group approved for comment collection.');}
+  if(cmd==='/start')return bot.sendMessage(m.chat.id,'🎟️ <b>CMT PICKER V2 PRO</b>\n━━━━━━━━━━━━━━━━━━\n\n🎁 <b>Giveaway Picker</b>\n⭐ <b>Paid Star Picker</b>\n🔄 <b>Reroll & Winner History</b>\n🛡️ <b>Secure Admin Controls</b>\n\n━━━━━━━━━━━━━━━━━━\n✅ <i>System ready for secure winner selection.</i>',{parse_mode:'HTML'});
+  if(cmd==='/approve'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ <b>OWNER ONLY</b>\n\nYou do not have permission to use this command.');await Group.updateOne({id:String(m.chat.id)},{$set:{approved:true}},{upsert:true});return bot.sendMessage(m.chat.id,'✅ Group approved for comment collection.');}
   if(cmd==='/admin'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');const [u,g,w,e]=await Promise.all([User.countDocuments(),Group.countDocuments(),Giveaway.countDocuments(),Entry.countDocuments()]);return bot.sendMessage(m.chat.id,'<b>V2 PRO DASHBOARD</b>\n\n👤 Users: <b>'+u+'</b>\n👥 Groups: <b>'+g+'</b>\n🎁 Giveaways: <b>'+w+'</b>\n💬 Entries: <b>'+e+'</b>\n\n/status - system health',{parse_mode:'HTML'});}
   if(cmd==='/status'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');return bot.sendMessage(m.chat.id,'🟢 <b>V2 Pro Online</b>\nUptime: '+Math.floor(process.uptime())+'s\nMongo: '+(mongoose.connection.readyState===1?'connected':'disconnected')+'\nNode: '+process.version,{parse_mode:'HTML'});}
   if(cmd==='/giveaway')return createGiveaway(m,parts[1],parts.slice(2).join(' '));
@@ -232,24 +232,24 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');
 
   const reply=m.reply_to_message;
-  if(!reply)return bot.sendMessage(m.chat.id,'❌ Reply to the participant comment. Usage: .s 4');
+  if(!reply)return bot.sendMessage(m.chat.id,'❌ <b>PAID STAR RECORDING</b>\n\nReply to the participant comment.\n\nUsage: <code>.s 4</code>');
 
   const raw=String(value||'').trim();
   if(!/^\d+$/.test(raw)){
-   return bot.sendMessage(m.chat.id,'❌ Star count must be a whole number. Example: .s 4');
+   return bot.sendMessage(m.chat.id,'❌ <b>INVALID STAR AMOUNT</b>\n\nEnter a whole number.\n\nExample: <code>.s 4</code>');
   }
 
   const starCount=Number(raw);
   if(!Number.isSafeInteger(starCount)||starCount<1||starCount>100000){
-   return bot.sendMessage(m.chat.id,'❌ Star count must be between 1 and 100000.');
+   return bot.sendMessage(m.chat.id,'❌ <b>INVALID STAR AMOUNT</b>\n\nStar amount must be between <b>1</b> and <b>100,000</b>.');
   }
 
   const target=reply.from;
   if(!target?.id){
-   return bot.sendMessage(m.chat.id,'❌ The replied message must be a comment sent by a Telegram user.');
+   return bot.sendMessage(m.chat.id,'❌ <b>INVALID PARTICIPANT</b>\n\nReply to a comment sent by a Telegram user.');
   }
   if(target.is_bot){
-   return bot.sendMessage(m.chat.id,'❌ Bot accounts cannot be recorded as Paid Star participants.');
+   return bot.sendMessage(m.chat.id,'❌ <b>INVALID PARTICIPANT</b>\n\nBot accounts cannot be recorded as Paid Star participants.');
   }
 
   let g=null;
@@ -263,10 +263,10 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   // Fallback to the normal giveaway resolver for forwarded/cross-chat replies.
   if(!g)g=await findGiveaway(m);
 
-  if(!g)return bot.sendMessage(m.chat.id,'❌ No giveaway found for this comment. Reply directly to a comment under the giveaway post.');
+  if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply directly to a participant comment under the giveaway post.');
 
   if(['cancelled','expired'].includes(g.status)){
-   return bot.sendMessage(m.chat.id,'❌ This giveaway is no longer available for Paid Star recording.');
+   return bot.sendMessage(m.chat.id,'⚠️ <b>GIVEAWAY CLOSED</b>\n\nPaid Star recording is no longer available for this giveaway.');
   }
 
   const now=new Date();
@@ -312,11 +312,11 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
    {parse_mode:'HTML',reply_to_message_id:m.message_id}
   );
  }
- async function createGiveaway(m,countArg,keyword){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');const r=m.reply_to_message;if(!r)return bot.sendMessage(m.chat.id,'Reply to the forwarded channel giveaway post. Usage: /giveaway 3 optional-keyword');const origin=extractChannelOrigin(m);const postId=origin?.channelPostId||r.forward_from_message_id||r.message_id;const channelId=origin?.channelId||String(r.forward_from_chat?.id||r.chat?.id||'');const rawCount=Number(countArg||1);if(!Number.isInteger(rawCount)||rawCount<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.');if(rawCount>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per giveaway is '+cfg.pickCountMax+'.');const count=rawCount;const g=await Giveaway.findOneAndUpdate({channelId,channelPostId:postId},{$set:{discussionChatId:String(m.chat.id),winnerCount:count,rules:{keyword:keyword||undefined,requireUsername:false,requireBotStart:false,excludeAdmins:true}},$setOnInsert:{title:(r.text||r.caption||'Giveaway').slice(0,120),status:'active',durationSeconds:cfg.rollDurationSeconds,createdBy:String(m.from.id),createdAt:new Date()}},{upsert:true,new:true});await bot.sendMessage(m.chat.id,'🎁 <b>GIVEAWAY CONFIGURED</b>\n\nID: <code>'+g._id+'</code>\nWinners: <b>'+count+'</b>\nKeyword: <b>'+esc(keyword||'None')+'</b>\n\nComments replying to this post are collected automatically.',{parse_mode:'HTML'});await AuditEvent.create({action:'create_giveaway',actorId:String(m.from.id),giveawayId:g._id,meta:{count,keyword:keyword||null}});}
+ async function createGiveaway(m,countArg,keyword){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ <b>ADMIN ACCESS REQUIRED</b>\n\nOnly the group admin or bot owner can use this command.');const r=m.reply_to_message;if(!r)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY SETUP</b>\n\nReply to the forwarded channel post.\n\nUsage: <code>/giveaway 3 keyword</code>');const origin=extractChannelOrigin(m);const postId=origin?.channelPostId||r.forward_from_message_id||r.message_id;const channelId=origin?.channelId||String(r.forward_from_chat?.id||r.chat?.id||'');const rawCount=Number(countArg||1);if(!Number.isInteger(rawCount)||rawCount<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.');if(rawCount>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per giveaway is '+cfg.pickCountMax+'.');const count=rawCount;const g=await Giveaway.findOneAndUpdate({channelId,channelPostId:postId},{$set:{discussionChatId:String(m.chat.id),winnerCount:count,rules:{keyword:keyword||undefined,requireUsername:false,requireBotStart:false,excludeAdmins:true}},$setOnInsert:{title:(r.text||r.caption||'Giveaway').slice(0,120),status:'active',durationSeconds:cfg.rollDurationSeconds,createdBy:String(m.from.id),createdAt:new Date()}},{upsert:true,new:true});await bot.sendMessage(m.chat.id,'🎁 <b>GIVEAWAY CONFIGURED</b>\n\nID: <code>'+g._id+'</code>\nWinners: <b>'+count+'</b>\nKeyword: <b>'+esc(keyword||'None')+'</b>\n\nComments replying to this post are collected automatically.',{parse_mode:'HTML'});await AuditEvent.create({action:'create_giveaway',actorId:String(m.from.id),giveawayId:g._id,meta:{count,keyword:keyword||null}});}
  async function pick(m,arg){
   if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');
   const g=await findGiveaway(m,arg);
-  if(!g)return bot.sendMessage(m.chat.id,'No giveaway found. Reply to the giveaway post or provide its ID.');
+  if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply to the giveaway post or provide a valid Giveaway ID.');
   const parsed=Number(arg||g.winnerCount||1);
   if(!Number.isInteger(parsed)||parsed<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.');
   if(parsed>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per pick is '+cfg.pickCountMax+'.');const n=parsed;
@@ -484,8 +484,8 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
    if(p){try{await bot.editMessageText('⚠️ <b>PAID STAR DRAW FAILED</b>\\n\\n'+esc(e.message)+diagnostic+'\\n\\n<i>No winner result was published.</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}else await bot.sendMessage(m.chat.id,'❌ Star pick failed: '+esc(e.message)+diagnostic,{parse_mode:'HTML'});
   }
  }
- async function rerollCmd(m,arg){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');const g=await findGiveaway(m,arg);if(!g)return bot.sendMessage(m.chat.id,'No giveaway found.');const raw=Number(arg||g.winnerCount||1);if(!Number.isInteger(raw)||raw<1)return bot.sendMessage(m.chat.id,'❌ Reroll count must be a whole number greater than 0.');if(raw>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per reroll is '+cfg.pickCountMax+'.');const n=raw;try{const latestWinner=await Winner.findOne({giveawayId:g._id,status:'winner'}).sort({round:-1}).lean();const r=latestWinner?.selectionMode==='paid_star'?await rerollStarWinners(g._id,n):await reroll(g._id,n);const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));await bot.sendMessage(m.chat.id,'🔄 <b>REROLL COMPLETE</b> · ROUND '+r.round+'\n\n'+lines.join('\n')+'\n\n🔐 <i>Previous winners are excluded from this draw.</i>',{parse_mode:'HTML',reply_to_message_id:m.message_id});await AuditEvent.create({action:'reroll',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n,round:r.round}});}catch(e){await bot.sendMessage(m.chat.id,'⚠️ <b>REROLL FAILED</b>\n\n'+esc(e.message),{parse_mode:'HTML',reply_to_message_id:m.message_id});}}
- async function winnerList(m){const parts=(m.text||'').trim().split(/\s+/);const g=await findGiveaway(m,parts[1]);if(!g)return bot.sendMessage(m.chat.id,'No giveaway found.');const rows=await Winner.find({giveawayId:g._id,status:'winner'}).sort({round:-1,rank:1}).limit(20).lean();if(!rows.length)return bot.sendMessage(m.chat.id,'No active winners found.');return bot.sendMessage(m.chat.id,'🏆 <b>WINNER HISTORY</b>\n\n'+rows.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username})+' — Round '+w.round).join('\n'),{parse_mode:'HTML'});}
+ async function rerollCmd(m,arg){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');const g=await findGiveaway(m,arg);if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply to the giveaway post or provide its ID.');const raw=Number(arg||g.winnerCount||1);if(!Number.isInteger(raw)||raw<1)return bot.sendMessage(m.chat.id,'❌ Reroll count must be a whole number greater than 0.');if(raw>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per reroll is '+cfg.pickCountMax+'.');const n=raw;try{const latestWinner=await Winner.findOne({giveawayId:g._id,status:'winner'}).sort({round:-1}).lean();const r=latestWinner?.selectionMode==='paid_star'?await rerollStarWinners(g._id,n):await reroll(g._id,n);const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));await bot.sendMessage(m.chat.id,'🔄 <b>REROLL COMPLETE</b> · ROUND '+r.round+'\n\n'+lines.join('\n')+'\n\n🔐 <i>Previous winners are excluded from this draw.</i>',{parse_mode:'HTML',reply_to_message_id:m.message_id});await AuditEvent.create({action:'reroll',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n,round:r.round}});}catch(e){await bot.sendMessage(m.chat.id,'⚠️ <b>REROLL FAILED</b>\n\n'+esc(e.message),{parse_mode:'HTML',reply_to_message_id:m.message_id});}}
+ async function winnerList(m){const parts=(m.text||'').trim().split(/\s+/);const g=await findGiveaway(m,parts[1]);if(!g)return bot.sendMessage(m.chat.id,'No giveaway found.');const rows=await Winner.find({giveawayId:g._id,status:'winner'}).sort({round:-1,rank:1}).limit(20).lean();if(!rows.length)return bot.sendMessage(m.chat.id,'ℹ️ <b>NO ACTIVE WINNERS</b>\n\nThere are no current winners for this giveaway.');return bot.sendMessage(m.chat.id,'🏆 <b>WINNER HISTORY</b>\n\n'+rows.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username})+' — Round '+w.round).join('\n'),{parse_mode:'HTML'});}
  async function starSync(m){
   if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');
   if(!paidStarClient)return bot.sendMessage(m.chat.id,'⚠️ Paid Star historical sync is not configured. Set TG_API_ID and TG_API_HASH in Render, then redeploy.');
