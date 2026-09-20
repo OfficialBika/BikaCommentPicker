@@ -7,7 +7,7 @@ const entrySchema=new Schema({giveawayId:{type:Schema.Types.ObjectId,ref:'Giveaw
 entrySchema.index({giveawayId:1,userId:1},{unique:true});
 entrySchema.index({giveawayId:1,eligible:1,userId:1});
 entrySchema.index({giveawayId:1,eligible:1,enteredAt:1});
-const paidReactionSchema=new Schema({giveawayId:{type:Schema.Types.ObjectId,ref:'Giveaway',index:true},channelId:{type:String,index:true},channelPostId:{type:Number,index:true},userId:String,username:String,firstName:String,lastName:String,active:{type:Boolean,default:true,index:true},lastReactionAt:{type:Date,default:Date.now}},{timestamps:true});
+const paidReactionSchema=new Schema({giveawayId:{type:Schema.Types.ObjectId,ref:'Giveaway',index:true},channelId:{type:String,index:true},channelPostId:{type:Number,index:true},userId:String,username:String,firstName:String,lastName:String,starCount:{type:Number,default:1,min:1,max:100000},active:{type:Boolean,default:true,index:true},lastReactionAt:{type:Date,default:Date.now}},{timestamps:true});
 paidReactionSchema.index({giveawayId:1,userId:1},{unique:true});
 paidReactionSchema.index({giveawayId:1,active:1,userId:1});
 
