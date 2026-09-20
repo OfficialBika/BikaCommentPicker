@@ -15,7 +15,7 @@ function loadConfig() {
     broadcastDelayMs: intEnv('BROADCAST_DELAY_MS', 80, 0, 10000), broadcastMaxRetries: intEnv('BROADCAST_MAX_RETRIES', 3, 0, 10), logLevel: process.env.LOG_LEVEL || 'info',
     rollingEmojiId: process.env.ROLLING_EMOJI_ID || '5258077393884562645',
     tempDataRetentionDays: intEnv('TEMP_DATA_RETENTION_DAYS', 90, 1, 3650),
-    cleanupIntervalMinutes: intEnv('CLEANUP_INTERVAL_MINUTES', 60, 5, 1440)
+    cleanupIntervalMinutes: intEnv('CLEANUP_INTERVAL_MINUTES', 1440, 5, 1440)
   });
 }
 module.exports = { loadConfig };
