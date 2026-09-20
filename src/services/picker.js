@@ -235,7 +235,7 @@ async function pickStarWinners(id,count,options={}){
    }
   }
   const round=(g.pickRound||0)+1;
-  const docs=selected.candidates.map((u,i)=>({giveawayId:id,round,userId:u.userId,username:u.username,firstName:u.firstName,lastName:u.lastName,selectionMode:'paid_star',rank:i+1,status:'winner'}));
+  const docs=selected.candidates.map((u,i)=>({giveawayId:id,round,userId:u.userId,username:u.username,firstName:u.firstName,lastName:u.lastName,starCount:u.starCount,selectionMode:'paid_star',rank:i+1,status:'winner'}));
   await Winner.insertMany(docs,{ordered:true});
   const updated=await Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed',pickRound:round,pickedAt:new Date()},$inc:{stateVersion:1}});
   if(!updated.modifiedCount)throw new Error('Giveaway state changed before winners could be finalized.');
