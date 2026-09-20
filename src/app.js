@@ -163,13 +163,17 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
 
   const active=hasPaidReaction(r.new_reaction);
   const user=r.user;
+  const existing=await PaidReaction.findOne({giveawayId:g._id,userId:String(user.id)})
+   .select('manualOverride')
+   .lean();
+  const effectiveActive=existing?.manualOverride===true?true:active;
   await PaidReaction.findOneAndUpdate(
    {giveawayId:g._id,userId:String(user.id)},
    {$set:{
     channelId,channelPostId:postId,userId:String(user.id),
     username:user.username||'',firstName:user.first_name||'',lastName:user.last_name||'',
-    active,lastReactionAt:now
-   },$setOnInsert:{starCount:1}},
+    active:effectiveActive,lastReactionAt:now
+   },$setOnInsert:{starCount:1,manualOverride:false}},
    {upsert:true,new:true}
   );
   await saveUser(user);
@@ -272,6 +276,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
     firstName:target.first_name||'',
     lastName:target.last_name||'',
     starCount,
+    manualOverride:true,
     active:true,
     lastReactionAt:now
    }},
