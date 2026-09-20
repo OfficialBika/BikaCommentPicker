@@ -260,7 +260,7 @@ async function rerollStarWinners(id,count){
  if(active<count)throw new Error('Paid Star reactions changed during reroll. Please try again.');
  await Winner.updateMany({giveawayId:id,status:'winner'},{$set:{status:'rerolled'}});
  const round=(g.pickRound||0)+1;
- const docs=selected.candidates.map((u,i)=>({giveawayId:id,round,userId:u.userId,username:u.username,firstName:u.firstName,lastName:u.lastName,selectionMode:'paid_star',rank:i+1,status:'winner'}));
+ const docs=selected.candidates.map((u,i)=>({giveawayId:id,round,userId:u.userId,username:u.username,firstName:u.firstName,lastName:u.lastName,starCount:u.starCount,selectionMode:'paid_star',rank:i+1,status:'winner'}));
  await Winner.insertMany(docs,{ordered:true});
  await Giveaway.updateOne({_id:id},{$set:{pickRound:round,pickedAt:new Date()},$inc:{stateVersion:1}});
  return {giveaway:g,winners:docs,entryCount:selected.candidateCount,candidateCount:selected.candidateCount,round};
