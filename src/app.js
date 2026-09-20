@@ -305,10 +305,13 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   return bot.sendMessage(
    m.chat.id,
    '⭐ <b>PAID STAR RECORDED</b>\\n\\n'+
-   '👤 User: <b>'+display+'</b>\\n'+
-   '⭐ Stars: <b>'+starCount+'</b>\\n'+
-   '🆔 Post ID: <b>'+esc(g.channelPostId)+'</b>\\n\\n'+
-   '<i>This replaces the previous manual Star count for this user on this giveaway.</i>',
+   '━━━━━━━━━━━━━━━━━━\\n'+
+   '👤 <b>User</b>\\n└ '+display+'\\n\\n'+
+   '⭐ <b>Star Amount</b>\\n└ <b>'+starCount+'</b> Stars\\n\\n'+
+   '🆔 <b>Giveaway Post</b>\\n└ #'+esc(g.channelPostId)+'\\n'+
+   '━━━━━━━━━━━━━━━━━━\\n'+
+   '✅ Successfully recorded\\n'+
+   '🔄 Previous amount replaced',
    {parse_mode:'HTML',reply_to_message_id:m.message_id}
   );
  }
