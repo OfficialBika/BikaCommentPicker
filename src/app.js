@@ -230,7 +230,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(!reply)return bot.sendMessage(m.chat.id,'❌ Reply to the participant comment. Usage: .s 4');
 
   const raw=String(value||'').trim();
-  if(!/^\\d+$/.test(raw)){
+  if(!/^\d+$/.test(raw)){
    return bot.sendMessage(m.chat.id,'❌ Star count must be a whole number. Example: .s 4');
   }
 
