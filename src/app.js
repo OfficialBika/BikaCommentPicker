@@ -304,13 +304,13 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   const display=doc.username?'@'+esc(doc.username):esc([doc.firstName,doc.lastName].filter(Boolean).join(' ')||'User');
   return bot.sendMessage(
    m.chat.id,
-   '⭐ <b>PAID STAR RECORDED</b>\\n\\n'+
-   '━━━━━━━━━━━━━━━━━━\\n'+
-   '👤 <b>User</b>\\n└ '+display+'\\n\\n'+
-   '⭐ <b>Star Amount</b>\\n└ <b>'+starCount+'</b> Stars\\n\\n'+
-   '🆔 <b>Giveaway Post</b>\\n└ #'+esc(g.channelPostId)+'\\n'+
-   '━━━━━━━━━━━━━━━━━━\\n'+
-   '✅ Successfully recorded\\n'+
+   '⭐ <b>PAID STAR RECORDED</b>\n\n'+
+   '━━━━━━━━━━━━━━━━━━\n'+
+   '👤 <b>User</b>\n└ '+display+'\n\n'+
+   '⭐ <b>Star Amount</b>\n└ <b>'+starCount+'</b> Stars\n\n'+
+   '🆔 <b>Giveaway Post</b>\n└ #'+esc(g.channelPostId)+'\n'+
+   '━━━━━━━━━━━━━━━━━━\n'+
+   '✅ Successfully recorded\n'+
    '🔄 Previous amount replaced',
    {parse_mode:'HTML',reply_to_message_id:m.message_id}
   );
@@ -338,16 +338,22 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
     const waitEmoji=customEmoji('5399850755337240950','⏳');
     const renderRolling=(filled,candidates)=>[
   rollTitle,
-  '━━━━━━━━━━━━━━',
+  '━━━━━━━━━━━━━━━━━━',
   '',
-  selectEmoji+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 𝐖𝐈𝐍𝐍𝐄𝐑𝐒...</b>',
+  selectEmoji+' <b>SELECTING WINNERS</b>',
   progress(filled,barSize),
   '',
-  roundEmoji+' Round <b>1</b>',
-  candidateEmoji+' Candidates: <b>'+candidates+'</b>',
-  winnerEmoji+' Winners: <b>'+n+'</b>',
-  secureEmoji+' Secure random selection',
-  waitEmoji+' Please wait...'
+  roundEmoji+' <b>Round</b>',
+  '└ <b>1</b>',
+  '',
+  candidateEmoji+' <b>Candidates</b>',
+  '└ <b>'+candidates+'</b>',
+  '',
+  winnerEmoji+' <b>Winners</b>',
+  '└ <b>'+n+'</b>',
+  '',
+  secureEmoji+' <b>Secure random selection</b>',
+  waitEmoji+' <i>Please wait...</i>'
 ].join('\n');
     p=await bot.sendMessage(m.chat.id,renderRolling(0,'Preparing...'),{parse_mode:'HTML',reply_to_message_id:m.message_id});
     let nextStep=1;
@@ -377,9 +383,22 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
     const defaultMedal=['🥇','🥈','🥉'];
     const rankEmoji=(i)=>i<3?customEmoji(medalIds[i],defaultMedal[i]):customEmoji('5150415989841593609','🎖️');
     const lines=r.winners.map((w,i)=>rankEmoji(i)+' <b>#'+(i+1)+'</b>  '+winnerDisplay(w)+'\n   '+customEmoji('5215334566549540768','💬')+' '+esc(comments.get(String(w.userId))||'—'));
-    const header=customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐑𝐄𝐒𝐔𝐋𝐓</b>\n━━━━━━━━━━━━━━━\n\n'+customEmoji('5461151367559141950','🎉')+' <b>𝐖𝐈𝐍𝐍𝐄𝐑𝐒 𝐒𝐄𝐋𝐄𝐂𝐓𝐄𝐃</b>\n\n';
-    const stats=customEmoji('5444856076954520455','🧾')+' Post ID        <b>'+esc(g.channelPostId)+'</b>\n👥 Total Entries  <b>'+r.entryCount+'</b>\n'+customEmoji('4978994451964757181','🎖️')+' Winners        <b>'+r.winners.length+'</b>\n'+customEmoji('5280816565657300091','🎲')+' Round          <b>'+r.winners[0].round+'</b>\n\n';
-    const footer='━━━━━━━━━━━━━━━\n'+customEmoji('5197288647275071607','🛡️')+' Secure Random Draw\n'+customEmoji('6129931368148243023','⚡')+' CMT PICKER V2 PRO\n'+customEmoji('4907231385309152742','🪪')+' @CommentsPickerBot';
+    const header=customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐑𝐄𝐒𝐔𝐋𝐓</b>\n\n'+
+      '━━━━━━━━━━━━━━━━━━\n\n'+
+      customEmoji('5461151367559141950','🎉')+' <b>WINNERS SELECTED</b>\n\n';
+    const stats=
+      customEmoji('5444856076954520455','🧾')+' <b>Giveaway Post</b>\n'+
+      '└ <b>#'+esc(g.channelPostId)+'</b>\n\n'+
+      '👥 <b>Total Entries</b>\n'+
+      '└ <b>'+r.entryCount+'</b>\n\n'+
+      customEmoji('4978994451964757181','🎖️')+' <b>Winners</b>\n'+
+      '└ <b>'+r.winners.length+'</b>\n\n'+
+      customEmoji('5280816565657300091','🎲')+' <b>Round</b>\n'+
+      '└ <b>'+r.winners[0].round+'</b>\n\n';
+    const footer='━━━━━━━━━━━━━━━━━━\n'+
+      customEmoji('5197288647275071607','🛡️')+' <b>Secure Random Draw</b>\n'+
+      customEmoji('6129931368148243023','⚡')+' <b>CMT PICKER V2 PRO</b>\n'+
+      customEmoji('4907231385309152742','🪪')+' @CommentsPickerBot';
     await bot.editMessageText(header+stats+lines.join('\n\n')+'\n\n'+footer,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
     await AuditEvent.create({action:'pick',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n}});
   }catch(e){
@@ -410,16 +429,22 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   try{
    p=await bot.sendMessage(m.chat.id,[
   customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>',
-  '━━━━━━━━━━━━━━',
+  '━━━━━━━━━━━━━━━━━━',
   '',
-  customEmoji('5314336934271663511','🌟')+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 WINNERS...</b>',
+  customEmoji('5314336934271663511','🌟')+' <b>SELECTING WINNERS</b>',
   progress(0,10),
   '',
-  customEmoji('5260547274957672345','🎲')+' Round <b>1</b>',
-  customEmoji('5985525762973768278','👥')+' Candidates: <b>Preparing...</b>',
-  customEmoji('4978994451964757181','🎖️')+' Winners: <b>'+n+'</b>',
-  customEmoji('5224607267797606837','☄️')+' Secure random selection',
-  customEmoji('5399850755337240950','⏳')+' Please wait...'
+  customEmoji('5260547274957672345','🎲')+' <b>Round</b>',
+  '└ <b>1</b>',
+  '',
+  customEmoji('5985525762973768278','👥')+' <b>Candidates</b>',
+  '└ <b>Preparing...</b>',
+  '',
+  customEmoji('4978994451964757181','🎖️')+' <b>Winners</b>',
+  '└ <b>'+n+'</b>',
+  '',
+  customEmoji('5224607267797606837','☄️')+' <b>Secure random selection</b>',
+  customEmoji('5399850755337240950','⏳')+' <i>Please wait...</i>'
 ].join('\n'),{parse_mode:'HTML',reply_to_message_id:m.message_id});
    const barSize=10;
    const rollStepMs=2000;
@@ -442,16 +467,22 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
      nextEditAt+=rollStepMs;
      const text=[
   customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>',
-  '━━━━━━━━━━━━━━',
+  '━━━━━━━━━━━━━━━━━━',
   '',
-  customEmoji('5314336934271663511','🌟')+' <b>𝐒𝐄𝐋𝐄𝐂𝐓𝐈𝐍𝐆 WINNERS...</b>',
+  customEmoji('5314336934271663511','🌟')+' <b>SELECTING WINNERS</b>',
   progress(filled,10),
   '',
-  customEmoji('5260547274957672345','🎲')+' Round <b>1</b>',
-  customEmoji('5985525762973768278','👥')+' Candidates: <b>'+state.candidateCount+'</b>',
-  customEmoji('4978994451964757181','🎖️')+' Winners: <b>'+n+'</b>',
-  customEmoji('5224607267797606837','☄️')+' Secure random selection',
-  customEmoji('5399850755337240950','⏳')+' Please wait...'
+  customEmoji('5260547274957672345','🎲')+' <b>Round</b>',
+  '└ <b>1</b>',
+  '',
+  customEmoji('5985525762973768278','👥')+' <b>Candidates</b>',
+  '└ <b>'+state.candidateCount+'</b>',
+  '',
+  customEmoji('4978994451964757181','🎖️')+' <b>Winners</b>',
+  '└ <b>'+n+'</b>',
+  '',
+  customEmoji('5224607267797606837','☄️')+' <b>Secure random selection</b>',
+  customEmoji('5399850755337240950','⏳')+' <i>Please wait...</i>'
 ].join('\n');
      try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
     }
@@ -473,9 +504,22 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
     try{await bot.editMessageText(text,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch(e){if(!String(e.message||e).includes('message is not modified'))throw e;}
    }
    const lines=r.winners.map((w,i)=>customEmoji('5150415989841593609','🎖️')+' <b>#'+(i+1)+'</b>  '+winnerDisplay(w));
-   const header=customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>\n━━━━━━━━━━━━━━━\n\n'+customEmoji('5461151367559141950','🎉')+' <b>𝐖𝐈𝐍𝐍𝐄𝐑𝐒 𝐒𝐄𝐋𝐄𝐂𝐓𝐄𝐃</b>\n\n';
-   const stats=customEmoji('5444856076954520455','🧾')+' Post ID        <b>'+esc(g.channelPostId)+'</b>\n'+customEmoji('5280816565657300091','🎲')+' Round          <b>'+r.winners[0].round+'</b>\n'+customEmoji('4978994451964757181','🎖️')+' Winners        <b>'+r.winners.length+'</b>\n'+customEmoji('6129931368148243023','⚡')+' Active Stars   <b>'+r.candidateCount+'</b>\n\n';
-   const footer='━━━━━━━━━━━━━━━\n'+customEmoji('5197288647275071607','🛡️')+' Paid Star Random Draw\n'+customEmoji('6129931368148243023','⚡')+' CMT PICKER V2 PRO\n'+customEmoji('4907231385309152742','🪪')+' @CommentsPickerBot';
+   const header=customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>\n\n'+
+     '━━━━━━━━━━━━━━━━━━\n\n'+
+     customEmoji('5461151367559141950','🎉')+' <b>WINNERS SELECTED</b>\n\n';
+   const stats=
+     customEmoji('5444856076954520455','🧾')+' <b>Giveaway Post</b>\n'+
+     '└ <b>#'+esc(g.channelPostId)+'</b>\n\n'+
+     customEmoji('5280816565657300091','🎲')+' <b>Round</b>\n'+
+     '└ <b>'+r.winners[0].round+'</b>\n\n'+
+     customEmoji('4978994451964757181','🎖️')+' <b>Winners</b>\n'+
+     '└ <b>'+r.winners.length+'</b>\n\n'+
+     customEmoji('6129931368148243023','⚡')+' <b>Active Star Participants</b>\n'+
+     '└ <b>'+r.candidateCount+'</b>\n\n';
+   const footer='━━━━━━━━━━━━━━━━━━\n'+
+     customEmoji('5197288647275071607','🛡️')+' <b>Paid Star Random Draw</b>\n'+
+     customEmoji('6129931368148243023','⚡')+' <b>CMT PICKER V2 PRO</b>\n'+
+     customEmoji('4907231385309152742','🪪')+' @CommentsPickerBot';
    await bot.editMessageText(header+stats+lines.join('\n\n')+'\n\n'+footer,{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});
    await AuditEvent.create({action:'pick_star_winners',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n,paidReaction:true}});
   }catch(e){
@@ -483,11 +527,18 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
     PaidReaction.countDocuments({giveawayId:g._id,active:true}).catch(()=>0),
     PaidReaction.countDocuments({giveawayId:g._id,active:false}).catch(()=>0)
    ]);
-   const diagnostic='\\n\\n'+customEmoji('5985525762973768278','👥')+' Tracked Active: <b>'+trackedActive+'</b>\\n↩️ Tracked Inactive: <b>'+trackedInactive+'</b>\\n👤 Anonymous Paid Stars: <b>'+Number(g.anonymousPaidStarCount||0)+'</b>\\n\\n<i>Use /starstatus for webhook and reaction diagnostics.</i>';
-   if(p){try{await bot.editMessageText('⚠️ <b>PAID STAR DRAW FAILED</b>\\n\\n'+esc(e.message)+diagnostic+'\\n\\n<i>No winner result was published.</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}else await bot.sendMessage(m.chat.id,'❌ <b>PAID STAR PICK FAILED</b>\n\n'+esc(e.message)+diagnostic,{parse_mode:'HTML'});
+   const diagnostic='\n\n'+customEmoji('5985525762973768278','👥')+' Tracked Active: <b>'+trackedActive+'</b>\n↩️ Tracked Inactive: <b>'+trackedInactive+'</b>\n👤 Anonymous Paid Stars: <b>'+Number(g.anonymousPaidStarCount||0)+'</b>\n\n<i>Use /starstatus for webhook and reaction diagnostics.</i>';
+   if(p){try{await bot.editMessageText('⚠️ <b>PAID STAR DRAW FAILED</b>\n\n'+esc(e.message)+diagnostic+'\n\n<i>No winner result was published.</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}else await bot.sendMessage(m.chat.id,'❌ <b>PAID STAR PICK FAILED</b>\n\n'+esc(e.message)+diagnostic,{parse_mode:'HTML'});
   }
  }
- async function rerollCmd(m,arg){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ <b>ADMIN ACCESS REQUIRED</b>\n\nOnly the group admin or bot owner can use this command.');const g=await findGiveaway(m,arg);if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply to the giveaway post or provide its ID.');const raw=Number(arg||g.winnerCount||1);if(!Number.isInteger(raw)||raw<1)return bot.sendMessage(m.chat.id,'❌ Reroll count must be a whole number greater than 0.');if(raw>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per reroll is '+cfg.pickCountMax+'.');const n=raw;try{const latestWinner=await Winner.findOne({giveawayId:g._id,status:'winner'}).sort({round:-1}).lean();const r=latestWinner?.selectionMode==='paid_star'?await rerollStarWinners(g._id,n):await reroll(g._id,n);const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));await bot.sendMessage(m.chat.id,'🔄 <b>REROLL COMPLETE</b>\n━━━━━━━━━━━━━━━━━━\n\n🎲 <b>Round</b>\n└ '+r.round+'\n\n'+lines.join('\n')+'\n\n━━━━━━━━━━━━━━━━━━\n🛡️ <i>Previous winners are excluded from this draw.</i>',{parse_mode:'HTML',reply_to_message_id:m.message_id});await AuditEvent.create({action:'reroll',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n,round:r.round}});}catch(e){await bot.sendMessage(m.chat.id,'⚠️ <b>REROLL FAILED</b>\n\n'+esc(e.message),{parse_mode:'HTML',reply_to_message_id:m.message_id});}}
+ async function rerollCmd(m,arg){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ <b>ADMIN ACCESS REQUIRED</b>\n\nOnly the group admin or bot owner can use this command.');const g=await findGiveaway(m,arg);if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply to the giveaway post or provide its ID.');const raw=Number(arg||g.winnerCount||1);if(!Number.isInteger(raw)||raw<1)return bot.sendMessage(m.chat.id,'❌ Reroll count must be a whole number greater than 0.');if(raw>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per reroll is '+cfg.pickCountMax+'.');const n=raw;try{const latestWinner=await Winner.findOne({giveawayId:g._id,status:'winner'}).sort({round:-1}).lean();const r=latestWinner?.selectionMode==='paid_star'?await rerollStarWinners(g._id,n):await reroll(g._id,n);const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));await bot.sendMessage(m.chat.id,
+  '🔄 <b>REROLL COMPLETE</b>\n\n'+
+  '━━━━━━━━━━━━━━━━━━\n\n'+
+  '🎲 <b>Round</b>\n└ <b>'+r.round+'</b>\n\n'+
+  '🏆 <b>New Winners</b>\n'+lines.map((x,i)=>'└ '+x).join('\n')+'\n\n'+
+  '━━━━━━━━━━━━━━━━━━\n'+
+  '🛡️ <i>Previous winners are excluded from this draw.</i>',
+  {parse_mode:'HTML',reply_to_message_id:m.message_id});await AuditEvent.create({action:'reroll',actorId:String(m.from.id),giveawayId:g._id,meta:{count:n,round:r.round}});}catch(e){await bot.sendMessage(m.chat.id,'⚠️ <b>REROLL FAILED</b>\n\n'+esc(e.message),{parse_mode:'HTML',reply_to_message_id:m.message_id});}}
  async function winnerList(m){const parts=(m.text||'').trim().split(/\s+/);const g=await findGiveaway(m,parts[1]);if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply to the giveaway post or provide its ID.');const rows=await Winner.find({giveawayId:g._id,status:'winner'}).sort({round:-1,rank:1}).limit(20).lean();if(!rows.length)return bot.sendMessage(m.chat.id,'ℹ️ <b>NO ACTIVE WINNERS</b>\n\nThere are no current winners for this giveaway.');return bot.sendMessage(m.chat.id,'🏆 <b>WINNER HISTORY</b>\n━━━━━━━━━━━━━━━━━━\n\n'+rows.map((w,i)=>'🎖️ <b>#'+(i+1)+'</b>  '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username})+'\n   🎲 Round <b>'+w.round+'</b>').join('\n\n'),{parse_mode:'HTML'});}
  async function starSync(m){
   if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ <b>ADMIN ACCESS REQUIRED</b>\n\nOnly the group admin or bot owner can use this command.');
