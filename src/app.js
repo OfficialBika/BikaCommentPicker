@@ -64,7 +64,7 @@ async function start(){
  }
  async function saveUser(f){if(!f)return;await User.updateOne({id:String(f.id)},{$set:{username:f.username||'',firstName:f.first_name||'',lastName:f.last_name||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
  async function saveGroup(c){if(!c||!['group','supergroup'].includes(c.type))return;await Group.updateOne({id:String(c.id)},{$set:{title:c.title||'',type:c.type,username:c.username||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
- async function handleUpdate(u){if(u.callback_query)return callback(u.callback_query);if(u.message_reaction)return reactionUpdate(u.message_reaction);if(u.message_reaction_count)return reactionCountUpdate(u.message_reaction_count);const m=u.message||u.channel_post;if(u.message?.text?.startsWith('/')){if(m?.from)await saveUser(m.from);if(m?.chat)await saveGroup(m.chat);return command(u.message);}if(u.channel_post){if(m?.chat)await saveGroup(m.chat);return channelPost(u.channel_post);}if(m?.reply_to_message)return comment(m);}
+ async function handleUpdate(u){if(u.callback_query)return callback(u.callback_query);if(u.message_reaction)return reactionUpdate(u.message_reaction);if(u.message_reaction_count)return reactionCountUpdate(u.message_reaction_count);const m=u.message||u.channel_post;if(u.message?.text&&(/^(?:\/|\.s(?:\s|$))/i.test(u.message.text))){if(m?.from)await saveUser(m.from);if(m?.chat)await saveGroup(m.chat);return command(u.message);}if(u.channel_post){if(m?.chat)await saveGroup(m.chat);return channelPost(u.channel_post);}if(m?.reply_to_message)return comment(m);}
  async function channelPost(p){const text=p.text||p.caption||'';if(!text.toLowerCase().includes(cfg.mentionTag.toLowerCase()))return;await Giveaway.findOneAndUpdate({channelId:String(p.chat.id),channelPostId:p.message_id},{$setOnInsert:{channelId:String(p.chat.id),channelPostId:p.message_id,title:text.slice(0,120),status:'active',winnerCount:1,durationSeconds:cfg.rollDurationSeconds,createdAt:new Date()}},{upsert:true,new:true});}
  function extractChannelOrigin(msg){
   const r=msg?.reply_to_message;
@@ -169,7 +169,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
     channelId,channelPostId:postId,userId:String(user.id),
     username:user.username||'',firstName:user.first_name||'',lastName:user.last_name||'',
     active,lastReactionAt:now
-   }},
+   },$setOnInsert:{starCount:1}},
    {upsert:true,new:true}
   );
   await saveUser(user);
@@ -212,11 +212,95 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(cmd==='/giveaway')return createGiveaway(m,parts[1],parts.slice(2).join(' '));
   if(cmd==='/pickwinner')return pick(m,parts[1]);
   if(cmd==='/pickstarwinner')return pickStar(m,parts[1]);
+  if(cmd==='.s')return setManualStars(m,parts[1]);
   if(cmd==='/reroll')return rerollCmd(m,parts[1]);
   if(cmd==='/winnerlist')return winnerList(m);
   if(cmd==='/starstatus')return starStatus(m);
   if(cmd==='/starsync')return starSync(m);
   if(cmd==='/broadcast')return broadcast(m,parts.slice(1).join(' '));
+ }
+ async function setManualStars(m,value){
+  if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ Owner only.');
+
+  const reply=m.reply_to_message;
+  if(!reply)return bot.sendMessage(m.chat.id,'❌ Reply to the participant comment. Usage: .s 4');
+
+  const raw=String(value||'').trim();
+  if(!/^\\d+$/.test(raw)){
+   return bot.sendMessage(m.chat.id,'❌ Star count must be a whole number. Example: .s 4');
+  }
+
+  const starCount=Number(raw);
+  if(!Number.isSafeInteger(starCount)||starCount<1||starCount>100000){
+   return bot.sendMessage(m.chat.id,'❌ Star count must be between 1 and 100000.');
+  }
+
+  const target=reply.from;
+  if(!target?.id){
+   return bot.sendMessage(m.chat.id,'❌ The replied message must be a comment sent by a Telegram user.');
+  }
+  if(target.is_bot){
+   return bot.sendMessage(m.chat.id,'❌ Bot accounts cannot be recorded as Paid Star participants.');
+  }
+
+  let g=null;
+  // Most reliable path: the bot already stored this exact discussion comment.
+  const entry=await Entry.findOne({
+   groupChatId:String(m.chat.id),
+   commentMessageId:Number(reply.message_id)
+  }).select('giveawayId').lean();
+  if(entry?.giveawayId)g=await Giveaway.findById(entry.giveawayId);
+
+  // Fallback to the normal giveaway resolver for forwarded/cross-chat replies.
+  if(!g)g=await findGiveaway(m);
+
+  if(!g)return bot.sendMessage(m.chat.id,'❌ No giveaway found for this comment. Reply directly to a comment under the giveaway post.');
+
+  if(['cancelled','expired'].includes(g.status)){
+   return bot.sendMessage(m.chat.id,'❌ This giveaway is no longer available for Paid Star recording.');
+  }
+
+  const now=new Date();
+  const userId=String(target.id);
+  const doc=await PaidReaction.findOneAndUpdate(
+   {giveawayId:g._id,userId},
+   {$set:{
+    channelId:String(g.channelId),
+    channelPostId:Number(g.channelPostId),
+    userId,
+    username:target.username||'',
+    firstName:target.first_name||'',
+    lastName:target.last_name||'',
+    starCount,
+    active:true,
+    lastReactionAt:now
+   }},
+   {upsert:true,new:true,setDefaultsOnInsert:true}
+  );
+
+  await saveUser(target);
+  await AuditEvent.create({
+   action:'manual_paid_star_set',
+   actorId:String(m.from.id),
+   giveawayId:g._id,
+   targetId:userId,
+   meta:{
+    starCount,
+    source:'owner_reply_command',
+    replyMessageId:Number(reply.message_id)
+   }
+  }).catch(()=>{});
+
+  const display=doc.username?'@'+esc(doc.username):esc([doc.firstName,doc.lastName].filter(Boolean).join(' ')||'User');
+  return bot.sendMessage(
+   m.chat.id,
+   '⭐ <b>PAID STAR RECORDED</b>\\n\\n'+
+   '👤 User: <b>'+display+'</b>\\n'+
+   '⭐ Stars: <b>'+starCount+'</b>\\n'+
+   '🆔 Post ID: <b>'+esc(g.channelPostId)+'</b>\\n\\n'+
+   '<i>This replaces the previous manual Star count for this user on this giveaway.</i>',
+   {parse_mode:'HTML',reply_to_message_id:m.message_id}
+  );
  }
  async function createGiveaway(m,countArg,keyword){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ Group admin/owner only.');const r=m.reply_to_message;if(!r)return bot.sendMessage(m.chat.id,'Reply to the forwarded channel giveaway post. Usage: /giveaway 3 optional-keyword');const origin=extractChannelOrigin(m);const postId=origin?.channelPostId||r.forward_from_message_id||r.message_id;const channelId=origin?.channelId||String(r.forward_from_chat?.id||r.chat?.id||'');const rawCount=Number(countArg||1);if(!Number.isInteger(rawCount)||rawCount<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.');if(rawCount>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per giveaway is '+cfg.pickCountMax+'.');const count=rawCount;const g=await Giveaway.findOneAndUpdate({channelId,channelPostId:postId},{$set:{discussionChatId:String(m.chat.id),winnerCount:count,rules:{keyword:keyword||undefined,requireUsername:false,requireBotStart:false,excludeAdmins:true}},$setOnInsert:{title:(r.text||r.caption||'Giveaway').slice(0,120),status:'active',durationSeconds:cfg.rollDurationSeconds,createdBy:String(m.from.id),createdAt:new Date()}},{upsert:true,new:true});await bot.sendMessage(m.chat.id,'🎁 <b>GIVEAWAY CONFIGURED</b>\n\nID: <code>'+g._id+'</code>\nWinners: <b>'+count+'</b>\nKeyword: <b>'+esc(keyword||'None')+'</b>\n\nComments replying to this post are collected automatically.',{parse_mode:'HTML'});await AuditEvent.create({action:'create_giveaway',actorId:String(m.from.id),giveawayId:g._id,meta:{count,keyword:keyword||null}});}
  async function pick(m,arg){
