@@ -124,7 +124,7 @@ async function start(){
   return null;
  }
  async function comment(m){if(!['group','supergroup'].includes(m.chat.type))return;const g=await findGiveaway(m);if(g?.status==='active'){if(!g.discussionChatId){g.discussionChatId=String(m.chat.id);await g.save();}await recordComment(g,m);}}
-function customEmoji(id,fallback){return '<tg-emoji emoji-id="'+esc(id)+'">'+fallback+'</tg-emoji>';}
+function customEmoji(id,fallback){return fallback;}
 function winnerDisplay(w){
  return mention({
   id:w.userId,
@@ -379,7 +379,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
     }    const winnerIds=r.winners.map(w=>String(w.userId));
     const entries=await Entry.find({giveawayId:g._id,userId:{$in:winnerIds}}).select('userId commentText commentType').lean();
     const comments=new Map(entries.map(e=>[String(e.userId),{text:e.commentText||'',type:e.commentType||'text'}]));
-    const displayComment=(userId)=>{const c=comments.get(String(userId));if(!c)return '—';if(c.type==='sticker')return '🎨 <b>Sticker</b>';if(c.type!=='text')return '🖼️ <b>Media</b>';return esc(c.text||'—');};
+    const displayComment=(userId)=>{const c=comments.get(String(userId));if(!c)return '—';if(c.type==='sticker')return 'Sticker';if(c.type!=='text')return 'Media';const text=String(c.text||'').trim();if(text&&!/[A-Za-z0-9]/.test(text))return 'Emoji';return esc(text||'—');};
     const medalIds=['5440539497383087970','5447203607294265305','5453902265922376865'];
     const defaultMedal=['🥇','🥈','🥉'];
     const rankEmoji=(i)=>i<3?customEmoji(medalIds[i],defaultMedal[i]):customEmoji('5150415989841593609','🎖️');
@@ -507,7 +507,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
    const starWinnerIds=r.winners.map(w=>String(w.userId));
    const starEntries=await Entry.find({giveawayId:g._id,userId:{$in:starWinnerIds}}).select('userId commentText commentType').lean();
    const starComments=new Map(starEntries.map(e=>[String(e.userId),{text:e.commentText||'',type:e.commentType||'text'}]));
-   const displayStarComment=(userId)=>{const c=starComments.get(String(userId));if(!c)return '—';if(c.type==='sticker')return '🎨 <b>Sticker</b>';if(c.type!=='text')return '🖼️ <b>Media</b>';return esc(c.text||'—');};
+   const displayStarComment=(userId)=>{const c=starComments.get(String(userId));if(!c)return '—';if(c.type==='sticker')return 'Sticker';if(c.type!=='text')return 'Media';const text=String(c.text||'').trim();if(text&&!/[A-Za-z0-9]/.test(text))return 'Emoji';return esc(text||'—');};
    const lines=r.winners.map((w,i)=>customEmoji('5150415989841593609','🎖️')+' <b>#'+(i+1)+'</b>  '+winnerDisplay(w)+'\n   '+customEmoji('5215334566549540768','💬')+' '+displayStarComment(w.userId));
    const header=customEmoji('5188344996356448758','🏆')+' <b>𝐂𝐌𝐓 𝐏𝐈𝐂𝐊𝐄𝐑 • 𝐏𝐀𝐈𝐃 𝐒𝐓𝐀𝐑</b>\n\n'+
      '━━━━━━━━━━━━━━━━━━\n\n'+
