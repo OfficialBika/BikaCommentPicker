@@ -217,10 +217,10 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(cmd==='/start')return bot.sendMessage(m.chat.id,'🎟️ <b>CMT PICKER V2 PRO</b>\n━━━━━━━━━━━━━━━━━━\n\n🎁 <b>Giveaway Picker</b>\n⭐ <b>Paid Star Picker</b>\n🔄 <b>Reroll & Winner History</b>\n🛡️ <b>Secure Admin Controls</b>\n\n━━━━━━━━━━━━━━━━━━\n✅ <i>System ready for secure winner selection.</i>',{parse_mode:'HTML'});
   if(cmd==='/approve'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ <b>OWNER ONLY</b>\n\nYou do not have permission to use this command.');await Group.updateOne({id:String(m.chat.id)},{$set:{approved:true}},{upsert:true});return bot.sendMessage(m.chat.id,'✅ Group approved for comment collection.');}
   if(cmd==='/admin'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ <b>OWNER ONLY</b>\n\nYou do not have permission to use this command.');const [u,g,w,e]=await Promise.all([User.countDocuments(),Group.countDocuments(),Giveaway.countDocuments(),Entry.countDocuments()]);return bot.sendMessage(m.chat.id,'<b>V2 PRO DASHBOARD</b>\n\n👤 Users: <b>'+u+'</b>\n👥 Groups: <b>'+g+'</b>\n🎁 Giveaways: <b>'+w+'</b>\n💬 Entries: <b>'+e+'</b>\n\n/status - system health',{parse_mode:'HTML'});}
-  if(cmd==='/status'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ <b>OWNER ONLY</b>\n\nYou do not have permission to use this command.');return bot.sendMessage(m.chat.id,'🟢 <b>V2 Pro Online</b>\nUptime: '+Math.floor(process.uptime())+'s\nMongo: '+(mongoose.connection.readyState===1?'connected':'disconnected')+'\nNode: '+process.version,{parse_mode:'HTML'});}
-  if(cmd==='/giveaway')return createGiveaway(m,parts[1],parts.slice(2).join(' '));
+  if(cmd==='/status'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ <b>OWNER ONLY</b>\n\nYou do not have permission to use this command.');return bot.sendMessage(m.chat.id,'🟢 <b>V2 Pro Online</b>\nUptime: '+Math.floor(process.uptime())+'s\nMongo: '+(mongoose.connection.readyState===1?'connected':'disconnected')+'\nNode: '+process.version,{parse_mode:'HTML'});}  if(cmd==='/giveaway')return createGiveaway(m,parts[1],parts.slice(2).join(' '));
   if(cmd==='/pickwinner')return pick(m,parts[1]);
   if(cmd==='/pickstarwinner')return pickStar(m,parts[1]);
+  if(cmd==='/cleanstar')return cleanStar(m,parts[1]);
   if(cmd==='.s')return setManualStars(m,parts[1]);
   if(cmd==='/reroll')return rerollCmd(m,parts[1]);
   if(cmd==='/winnerlist')return winnerList(m);
@@ -228,6 +228,55 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(cmd==='/starsync')return starSync(m);
   if(cmd==='/broadcast')return broadcast(m,parts.slice(1).join(' '));
  }
+ async function cleanStar(m,arg){
+  if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ <b>ADMIN ACCESS REQUIRED</b>\n\nOnly the group admin or bot owner can use this command.');
+  const g=await findGiveaway(m,arg);
+  if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply to the giveaway post or provide a valid Giveaway ID.',{parse_mode:'HTML',reply_to_message_id:m.message_id});
+
+  const winners=await Winner.find({giveawayId:g._id}).select('userId selectionMode status round').lean();
+  const hasNonPaid=winners.some(w=>w.selectionMode!=='paid_star');
+  if(hasNonPaid){
+   return bot.sendMessage(m.chat.id,'⚠️ <b>CLEAN STAR BLOCKED</b>\n\nThis giveaway already contains a normal/comment winner record. I will not delete that winner history. Use this only to reset a Paid Star draw.',{parse_mode:'HTML',reply_to_message_id:m.message_id});
+  }
+  const paidWinners=winners.filter(w=>w.selectionMode==='paid_star');
+  const paidReactions=await PaidReaction.countDocuments({giveawayId:g._id});
+  if(!paidWinners.length&&!paidReactions){
+   return bot.sendMessage(m.chat.id,'ℹ️ <b>NOTHING TO CLEAN</b>\n\nThere is no Paid Star list or Paid Star winner record for this giveaway.',{parse_mode:'HTML',reply_to_message_id:m.message_id});
+  }
+
+  const [deletedReactions,deletedWinners]=await Promise.all([
+   PaidReaction.deleteMany({giveawayId:g._id}),
+   Winner.deleteMany({giveawayId:g._id,selectionMode:'paid_star'})
+  ]);
+  await Giveaway.updateOne(
+   {_id:g._id},
+   {$set:{status:'active',pickRound:0,pickedAt:null},$inc:{stateVersion:1}}
+  );
+  await AuditEvent.create({
+   action:'clean_paid_star',
+   actorId:String(m.from.id),
+   giveawayId:g._id,
+   meta:{
+    deletedPaidReactions:deletedReactions.deletedCount||0,
+    deletedPaidStarWinners:deletedWinners.deletedCount||0,
+    source:'owner_or_admin_command'
+   }
+  }).catch(()=>{});
+
+  return bot.sendMessage(m.chat.id,
+   '🧹 <b>PAID STAR RESET COMPLETE</b>\n━━━━━━━━━━━━━━━━━━\n\n'+
+   '🆔 <b>Giveaway Post</b>\n└ #'+esc(g.channelPostId)+'\n\n'+
+   '⭐ <b>Old Star Records Removed</b>\n└ '+(deletedReactions.deletedCount||0)+'\n'+
+   '🏆 <b>Old Star Winners Removed</b>\n└ '+(deletedWinners.deletedCount||0)+'\n\n'+
+   '🔄 Giveaway is <b>ACTIVE</b> again.\n\n'+
+   'Next:\n'+
+   '└ Reply to each participant and use <code>.s N</code>\n'+
+   '└ Then use <code>/pickstarwinner 5</code>\n'+
+   '━━━━━━━━━━━━━━━━━━',
+   {parse_mode:'HTML',reply_to_message_id:m.message_id}
+  );
+ }
+
  async function setManualStars(m,value){
   if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ <b>OWNER ONLY</b>\n\nYou do not have permission to use this command.');
 
@@ -437,8 +486,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   '',
   customEmoji('5260547274957672345','🎲')+' <b>Round</b>',
   '└ <b>1</b>',
-  '',
-  customEmoji('5985525762973768278','👥')+' <b>Candidates</b>',
+  '',  customEmoji('5985525762973768278','👥')+' <b>Candidates</b>',
   '└ <b>Preparing...</b>',
   '',
   customEmoji('4978994451964757181','🎖️')+' <b>Winners</b>',
