@@ -158,8 +158,10 @@ function secureUnit(){
  *
  * Each active reactor is one candidate, while starCount is its weight.
  * Efraimidis-Spirakis keys (log(U) / weight) give a weighted sample
- * without duplicating database rows, so 10 Stars means exactly 10x the
- * selection weight of 1 Star for the first draw.
+ * without duplicating database rows. A larger starCount produces a larger
+ * selection weight; for a single-winner draw, 10 Stars has 10x the weight
+ * of 1 Star. For multiple winners, inclusion probabilities remain weighted
+ * but are not simply 10x because sampling is without replacement.
  */
 async function selectRandomPaidReactors(giveawayId,count,blockedIds){
  const filter={giveawayId,active:true};
@@ -174,7 +176,9 @@ async function selectRandomPaidReactors(giveawayId,count,blockedIds){
  try{
   for await(const reactor of cursor){
    seen++;
-   const weight=Math.max(1,Math.min(100000,Number(reactor.starCount)||1));
+   const rawWeight=Number(reactor.starCount);
+   if(!Number.isSafeInteger(rawWeight)||rawWeight<1)continue;
+   const weight=Math.min(100000,rawWeight);
    const key=Math.log(secureUnit())/weight;
    const item={...reactor,starCount:weight,_weightKey:key};
 
