@@ -26,7 +26,7 @@ async function start(){
  // emoji fallback if Telegram rejects the custom-emoji entity.
  const rawSendMessage=bot.sendMessage.bind(bot);
  const rawEditMessageText=bot.editMessageText.bind(bot);
- const stripCustomEmojiTags=(value)=>String(value??'').replace(/<tg-emoji\\b[^>]*>([\\s\\S]*?)<\\/tg-emoji>/gi,'$1');
+ const stripCustomEmojiTags=(value)=>String(value??'').replace(/<tg-emoji\b[^>]*>([\s\S]*?)<\/tg-emoji>/gi,'$1');
 
  bot.sendMessage=async(...args)=>{
   try{
@@ -34,7 +34,7 @@ async function start(){
   }catch(error){
    const text=String(args[1]??'');
    const options=args[2];
-   if(options?.parse_mode==='HTML'&&/<tg-emoji\\b/i.test(text)){
+   if(options?.parse_mode==='HTML'&&/<tg-emoji\b/i.test(text)){
     const fallbackText=stripCustomEmojiTags(text);
     if(fallbackText!==text){
      try{
@@ -54,7 +54,7 @@ async function start(){
   }catch(error){
    const text=String(args[0]??'');
    const options=args[1];
-   if(options?.parse_mode==='HTML'&&/<tg-emoji\\b/i.test(text)){
+   if(options?.parse_mode==='HTML'&&/<tg-emoji\b/i.test(text)){
     const fallbackText=stripCustomEmojiTags(text);
     if(fallbackText!==text){
      try{
@@ -175,7 +175,7 @@ async function start(){
 function customEmoji(id,fallback){
  const safeId=String(id??'').trim();
  const safeFallback=String(fallback??'⭐');
- if(!/^\\d+$/.test(safeId))return esc(safeFallback);
+ if(!/^\d+$/.test(safeId))return esc(safeFallback);
  if(/[<&>]/.test(safeFallback))return esc(safeFallback);
  return '<tg-emoji emoji-id="'+safeId+'">'+safeFallback+'</tg-emoji>';
 }
