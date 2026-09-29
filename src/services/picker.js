@@ -166,40 +166,70 @@ function secureUnit(){
 async function selectRandomPaidReactors(giveawayId,count,blockedIds){
  const filter={giveawayId,active:true};
  if(blockedIds?.size)filter.userId={$nin:[...blockedIds]};
+
+ /*
+  * Paid Star ranking rule:
+  * 1. Higher starCount always gets a higher winner rank.
+  * 2. Users with the same starCount are shuffled randomly.
+  * 3. We then fill winner slots from the highest-star tier downward.
+  *
+  * Example for 7 winners:
+  * 10,10 -> random order for ranks 1-2
+  * 8      -> rank 3
+  * 5      -> rank 4
+  * 2      -> rank 5
+  * 1,1,1  -> random 2 of the 3 for ranks 6-7
+  *
+  * This intentionally replaces proportional weighted sampling. Star count
+  * determines the tier/rank, while randomness is only used inside ties.
+  */
  const cursor=PaidReaction.find(filter)
   .select('userId username firstName lastName starCount')
+  .sort({starCount:-1,_id:1})
   .lean()
   .cursor({batchSize:1000});
 
- const reservoir=[];
- let seen=0;
+ const winners=[];
+ let candidateCount=0;
+ let currentWeight=null;
+ let tieGroup=[];
+
+ const flushGroup=()=>{
+  if(!tieGroup.length||winners.length>=count)return;
+  for(let i=tieGroup.length-1;i>0;i--){
+   const j=crypto.randomInt(i+1);
+   [tieGroup[i],tieGroup[j]]=[tieGroup[j],tieGroup[i]];
+  }
+  const remaining=count-winners.length;
+  winners.push(...tieGroup.slice(0,remaining));
+  tieGroup=[];
+ };
+
  try{
   for await(const reactor of cursor){
-   seen++;
    const rawWeight=Number(reactor.starCount);
    if(!Number.isSafeInteger(rawWeight)||rawWeight<1)continue;
+
    const weight=Math.min(100000,rawWeight);
-   const key=Math.log(secureUnit())/weight;
-   const item={...reactor,starCount:weight,_weightKey:key};
+   candidateCount++;
 
-   if(reservoir.length<count){
-    reservoir.push(item);
-    continue;
+   if(currentWeight===null)currentWeight=weight;
+   if(weight!==currentWeight){
+    flushGroup();
+    if(winners.length>=count)break;
+    currentWeight=weight;
    }
 
-   let minIndex=0;
-   for(let i=1;i<reservoir.length;i++){
-    if(reservoir[i]._weightKey<reservoir[minIndex]._weightKey)minIndex=i;
-   }
-   if(key>reservoir[minIndex]._weightKey)reservoir[minIndex]=item;
+   tieGroup.push({...reactor,starCount:weight});
   }
- }finally{await cursor.close().catch(()=>{});}
+ }finally{
+  await cursor.close().catch(()=>{});
+ }
 
- reservoir.sort((a,b)=>b._weightKey-a._weightKey);
- reservoir.forEach(x=>delete x._weightKey);
- return {candidates:reservoir,candidateCount:seen};
+ if(winners.length<count)flushGroup();
+
+ return {candidates:winners,candidateCount};
 }
-
 async function pickStarWinners(id,count,options={}){
  const g=await Giveaway.findOneAndUpdate(
   {_id:id,status:'active'},
