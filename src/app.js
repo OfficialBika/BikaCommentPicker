@@ -19,6 +19,54 @@ async function start(){
  cleanupTimer.unref?.();
  const bot=new TelegramBot(cfg.botToken);const app=express();app.use(express.json({limit:'1mb'}));
  const paidStarClient=await createPaidStarClient(cfg,logger);
+
+ // Telegram custom-emoji HTML is supported by the Bot API, but a bad/unsupported
+ // custom emoji must never break a giveaway UI message. We keep the original
+ // custom emoji when Telegram accepts it and transparently retry once with the
+ // emoji fallback if Telegram rejects the custom-emoji entity.
+ const rawSendMessage=bot.sendMessage.bind(bot);
+ const rawEditMessageText=bot.editMessageText.bind(bot);
+ const stripCustomEmojiTags=(value)=>String(value??'').replace(/<tg-emoji\\b[^>]*>([\\s\\S]*?)<\\/tg-emoji>/gi,'$1');
+
+ bot.sendMessage=async(...args)=>{
+  try{
+   return await rawSendMessage(...args);
+  }catch(error){
+   const text=String(args[1]??'');
+   const options=args[2];
+   if(options?.parse_mode==='HTML'&&/<tg-emoji\\b/i.test(text)){
+    const fallbackText=stripCustomEmojiTags(text);
+    if(fallbackText!==text){
+     try{
+      const retryArgs=args.slice();
+      retryArgs[1]=fallbackText;
+      return await rawSendMessage(...retryArgs);
+     }catch{}
+    }
+   }
+   throw error;
+  }
+ };
+
+ bot.editMessageText=async(...args)=>{
+  try{
+   return await rawEditMessageText(...args);
+  }catch(error){
+   const text=String(args[0]??'');
+   const options=args[1];
+   if(options?.parse_mode==='HTML'&&/<tg-emoji\\b/i.test(text)){
+    const fallbackText=stripCustomEmojiTags(text);
+    if(fallbackText!==text){
+     try{
+      const retryArgs=args.slice();
+      retryArgs[0]=fallbackText;
+      return await rawEditMessageText(...retryArgs);
+     }catch{}
+    }
+   }
+   throw error;
+  }
+ };
  app.get('/',(_,res)=>res.type('text').send('Cmt Picker V2 Pro is running.'));
  app.get('/health',(_,res)=>res.json({ok:true,status:'healthy',uptime:process.uptime(),mongo:mongoose.connection.readyState===1}));
  app.get('/ready',(_,res)=>res.status(mongoose.connection.readyState===1?200:503).json({ok:mongoose.connection.readyState===1}));
@@ -124,7 +172,13 @@ async function start(){
   return null;
  }
  async function comment(m){if(!['group','supergroup'].includes(m.chat.type))return;const g=await findGiveaway(m);if(g?.status==='active'){if(!g.discussionChatId){g.discussionChatId=String(m.chat.id);await g.save();}await recordComment(g,m);}}
-function customEmoji(id,fallback){return fallback;}
+function customEmoji(id,fallback){
+ const safeId=String(id??'').trim();
+ const safeFallback=String(fallback??'⭐');
+ if(!/^\\d+$/.test(safeId))return esc(safeFallback);
+ if(/[<&>]/.test(safeFallback))return esc(safeFallback);
+ return '<tg-emoji emoji-id="'+safeId+'">'+safeFallback+'</tg-emoji>';
+}
 function winnerDisplay(w){
  return mention({
   id:w.userId,
