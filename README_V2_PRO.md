@@ -5,7 +5,7 @@ Production-focused Telegram giveaway/comment picker.
 This file documents the isolated V2 Pro development line. The V1 main branch remains untouched.
 
 ## Goals
-- Safe multi-giveaway lifecycle
+- Safe multi-giveaway lifecycle with exact comment-thread-to-post mapping\n- One immutable first comment per user per giveaway post, based on earliest Telegram message ID
 - Configurable entry rules
 - Atomic/locked winner picking and guarded rerolls
 - Telegram webhook secret-token verification
@@ -37,7 +37,7 @@ V2 Pro is designed so multiple giveaways can remain active at the same time with
 
 For large participant sets, winner selection uses streaming reservoir sampling rather than loading the complete entry set into Node.js memory. Memory usage therefore scales with the requested winner count, not with the number of participants. MongoDB compound indexes are included for giveaway/eligibility lookups.
 
-The rolling animation runs after the random sample has been prepared, so the final winner set is already fixed before the visible countdown finishes. Previous winners are excluded from later rounds and rerolls.
+The rolling animation runs after the random sample has been prepared, so the final winner set is already fixed before the visible countdown finishes. Previous winners are excluded from later rounds and rerolls. Comment replies are associated with the exact channel post through a persisted message-to-giveaway map; when a reply cannot be safely tied to a post, the bot skips it rather than assigning it to the latest active giveaway.
 
 MongoDB's aggregation $sample can fall back to reading and randomly sorting the entire input when the sample is above its random-cursor threshold. V2 Pro instead keeps the picker memory-bounded and predictable for very large giveaways.
 
