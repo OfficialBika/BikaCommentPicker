@@ -43,7 +43,7 @@ test('approval policy requires exact boolean approval and fails closed for missi
  assert.equal(isApproved(null),false);
 });
 test('approval commands use numeric chat IDs only',()=>{
- const valid=id=>typeof id==='string'&&/^-?\\d+$/.test(id.trim());
+ const valid=id=>typeof id==='string'&&/^-?\d+$/.test(id.trim());
  assert.equal(valid('-1001234567890'),true);
  assert.equal(valid('123456'),true);
  assert.equal(valid('@publicgroup'),false);
