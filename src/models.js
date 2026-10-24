@@ -1,4 +1,5 @@
 const mongoose=require('mongoose');const {Schema}=mongoose;
+let Group;
 const userSchema=new Schema({id:{type:String,unique:true,index:true},username:String,firstName:String,lastName:String,lastSeenAt:Date},{timestamps:true});
 const groupSchema=new Schema({id:{type:String,unique:true,index:true},title:String,type:String,username:String,approved:{type:Boolean,default:false},lastSeenAt:Date},{timestamps:true});
 const giveawaySchema=new Schema({channelId:{type:String,index:true},channelPostId:{type:Number,index:true},discussionChatId:String,title:String,status:{type:String,enum:['active','picking','completed','cancelled','expired'],default:'active',index:true},winnerCount:{type:Number,default:1,min:1,max:100},reserveWinnerCount:{type:Number,default:0,min:0,max:100},durationSeconds:{type:Number,default:20,min:0,max:120},createdBy:String,createdAt:{type:Date,default:Date.now},pickedAt:Date,rules:{keyword:String,requireUsername:{type:Boolean,default:false},requireBotStart:{type:Boolean,default:false},excludeAdmins:{type:Boolean,default:true}},pickRound:{type:Number,default:0},pickerMessageId:Number,stateVersion:{type:Number,default:0},anonymousPaidStarCount:{type:Number,default:0,min:0},anonymousPaidStarCountUpdatedAt:Date,lastReactionUpdateAt:Date},{timestamps:true});
@@ -42,4 +43,6 @@ async function repairLegacyGroupIndexes({logger = console} = {}) {
  await Group.createIndexes();
 }
 
-module.exports={repairLegacyGroupIndexes,User:mongoose.model('UserV2',userSchema,'users'),Group:mongoose.model('GroupV2',groupSchema,'groupchats'),Giveaway:mongoose.model('GiveawayV2',giveawaySchema,'giveawayposts'),Entry:mongoose.model('EntryV2',entrySchema,'entries'),PaidReaction:mongoose.model('PaidReactionV2',paidReactionSchema,'paidreactions'),Winner:mongoose.model('WinnerV2',winnerSchema,'winnerhistories'),BroadcastJob:mongoose.model('BroadcastJobV2',broadcastSchema,'broadcastjobs'),AuditEvent:mongoose.model('AuditEventV2',auditSchema,'auditevents'),CommentMessage:mongoose.model('CommentMessageV2',commentMessageSchema,'commentmessages')};
+const User=mongoose.model('UserV2',userSchema,'users');
+Group=mongoose.model('GroupV2',groupSchema,'groupchats');
+module.exports={repairLegacyGroupIndexes,User,Group,Giveaway:mongoose.model('GiveawayV2',giveawaySchema,'giveawayposts'),Entry:mongoose.model('EntryV2',entrySchema,'entries'),PaidReaction:mongoose.model('PaidReactionV2',paidReactionSchema,'paidreactions'),Winner:mongoose.model('WinnerV2',winnerSchema,'winnerhistories'),BroadcastJob:mongoose.model('BroadcastJobV2',broadcastSchema,'broadcastjobs'),AuditEvent:mongoose.model('AuditEventV2',auditSchema,'auditevents'),CommentMessage:mongoose.model('CommentMessageV2',commentMessageSchema,'commentmessages')};
