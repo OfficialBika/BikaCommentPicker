@@ -144,12 +144,12 @@ async function start(){
   }
   if(u.message_reaction){
    const chat=u.message_reaction.chat;
-   if(!chat||chat.type!=='channel'||!(await Giveaway.exists({channelId:String(chat.id),channelPostId:Number(u.message_reaction.message_id)})))return;
+   if(!chat||chat.type!=='channel'||!(await isApprovedGroup(chat.id))||!(await Giveaway.exists({channelId:String(chat.id),channelPostId:Number(u.message_reaction.message_id)})))return;
    return reactionUpdate(u.message_reaction);
   }
   if(u.message_reaction_count){
    const chat=u.message_reaction_count.chat;
-   if(!chat||chat.type!=='channel'||!(await Giveaway.exists({channelId:String(chat.id),channelPostId:Number(u.message_reaction_count.message_id)})))return;
+   if(!chat||chat.type!=='channel'||!(await isApprovedGroup(chat.id))||!(await Giveaway.exists({channelId:String(chat.id),channelPostId:Number(u.message_reaction_count.message_id)})))return;
    return reactionCountUpdate(u.message_reaction_count);
   }
   const m=u.message||u.channel_post;
