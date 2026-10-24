@@ -24,4 +24,22 @@ const commentMessageSchema=new Schema({
 },{timestamps:true});
 commentMessageSchema.index({groupChatId:1,messageId:1},{unique:true});
 commentMessageSchema.index({giveawayId:1,createdAt:1});
-module.exports={User:mongoose.model('UserV2',userSchema,'users'),Group:mongoose.model('GroupV2',groupSchema,'groupchats'),Giveaway:mongoose.model('GiveawayV2',giveawaySchema,'giveawayposts'),Entry:mongoose.model('EntryV2',entrySchema,'entries'),PaidReaction:mongoose.model('PaidReactionV2',paidReactionSchema,'paidreactions'),Winner:mongoose.model('WinnerV2',winnerSchema,'winnerhistories'),BroadcastJob:mongoose.model('BroadcastJobV2',broadcastSchema,'broadcastjobs'),AuditEvent:mongoose.model('AuditEventV2',auditSchema,'auditevents'),CommentMessage:mongoose.model('CommentMessageV2',commentMessageSchema,'commentmessages')};
+
+async function repairLegacyGroupIndexes({logger = console} = {}) {
+ const collection = mongoose.connection.collection('groupchats');
+ const indexes = await collection.indexes();
+ const legacy = indexes.filter(index =>
+  index.name === 'groupChatId_1' &&
+  index.unique === true &&
+  index.key &&
+  Object.keys(index.key).length === 1 &&
+  index.key.groupChatId === 1
+ );
+ for (const index of legacy) {
+  await collection.dropIndex(index.name);
+  logger.warn('Dropped obsolete unique groupchats index', {index: index.name});
+ }
+ await Group.createIndexes();
+}
+
+module.exports={repairLegacyGroupIndexes,User:mongoose.model('UserV2',userSchema,'users'),Group:mongoose.model('GroupV2',groupSchema,'groupchats'),Giveaway:mongoose.model('GiveawayV2',giveawaySchema,'giveawayposts'),Entry:mongoose.model('EntryV2',entrySchema,'entries'),PaidReaction:mongoose.model('PaidReactionV2',paidReactionSchema,'paidreactions'),Winner:mongoose.model('WinnerV2',winnerSchema,'winnerhistories'),BroadcastJob:mongoose.model('BroadcastJobV2',broadcastSchema,'broadcastjobs'),AuditEvent:mongoose.model('AuditEventV2',auditSchema,'auditevents'),CommentMessage:mongoose.model('CommentMessageV2',commentMessageSchema,'commentmessages')};
