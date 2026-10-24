@@ -3,38 +3,38 @@
 Production-focused Telegram giveaway/comment picker.
 
 ## Highlights
-- Atomic winner-picking lock to prevent double draws
-- Reroll rounds exclude every previous winner
-- MongoDB-backed giveaway, entry, winner, broadcast and audit state
-- Strict post/thread-specific comment attribution; no fallback to an unrelated active giveaway
-- One immutable first comment per user per giveaway post, with earliest Telegram message ID winning when updates race
-- Keyword and username rules evaluated on the first comment; later comments cannot replace an ineligible first entry
-- Owner/admin permission checks with strict owner-approved group/channel enforcement; unapproved chats are silently ignored
-- Telegram webhook secret-token verification and ordered per-chat update processing
-- Telegram rate-limit retry handling for broadcasts
-- Health/readiness endpoints and graceful shutdown
-- Isolated v2-pro branch; main remains untouched
+- Atomic winner-picking locks and guarded reroll rounds
+- Rerolls exclude all previous winners
+- MongoDB-backed giveaway, entry, winner, broadcast and audit records
+- Exact post/thread-specific comment attribution; no fallback to unrelated active giveaways
+- One entry per user and giveaway; earliest Telegram message ID decides the first comment during update races
+- First-comment keyword, username and admin eligibility rules
+- Owner-approved group/channel access; unapproved chats are silently ignored
+- Telegram webhook secret verification and ordered per-chat processing
+- Rate-limit-aware broadcast retries
+- Original custom emoji IDs and rich result cards preserved
+- Paginated winner history
+- Isolated `v2-pro` line; `main` remains untouched
 
 ## Commands
-- `/start` — help
-- `/approvec` / `/approve` — Owner approves the current group (silently) or `/approvec <GROUP_ID>` from Owner private chat
-- `/unapprove` — Owner revokes approval; from private chat use `/unapprove <GROUP_ID>`
-- `/approvegclist` — list the first 100 approved groups/channels (Owner only; run in private chat)
-- /giveaway 3 keyword — reply to a forwarded channel post to configure
-- /pickwinner [count|giveawayId] — securely pick winners
-- /reroll [count|giveawayId] — replacement winners
-- /winnerlist [giveawayId] — show current winners
-- /admin — dashboard (owner)
-- /status — runtime health (owner)
-- /broadcast <html text> — queued broadcast
+- `/approvec` / `/approve` — owner approves the current group silently; `/approvec <GROUP_ID>` from owner private chat
+- `/unapprove <GROUP_ID>` — revoke a group/channel
+- `/approvegclist` — show approved groups/channels
+- `/giveaway <winner-count> [keyword]` — reply to the forwarded giveaway channel post
+- `/pickwinner <count|giveawayId>` — draw from eligible comments
+- `/pickstarwinner <count|giveawayId>` — draw from current Paid Star reactors
+- `/reroll <count|giveawayId>` — replacement draw excluding prior winners
+- `/winnerlist [giveawayId] [page]` — current winner list, 10 records per page
+- `/starsync`, `/starstatus`, `.s <count>`, `/cleanstar`, `/admin`, `/status`, `/broadcast`
+
+## Message formatting
+Message builders normalize escaped newline sequences, limit excessive blank lines, and escape user-generated content before Telegram HTML rendering. Original custom emoji IDs remain in all rich result cards.
 
 ## Deployment
-1. Node.js 18+
-2. Copy .env.v2-pro.example to .env and fill secrets
-3. npm install
-4. npm test and npm run check
-5. npm start
-6. Set PUBLIC_URL to the HTTPS service URL for webhook registration
-7. Set WEBHOOK_SECRET_TOKEN to a random 1–256 character secret; requests without the matching Telegram secret header are rejected
+1. Use Node.js 18+.
+2. Copy `.env.v2-pro.example` to `.env` and fill secrets.
+3. Configure `BOT_TOKEN`, `OWNER_ID`, `MONGO_URI`, `PUBLIC_URL`, and `WEBHOOK_SECRET_TOKEN`.
+4. Optional historical Paid Star sync requires `TG_API_ID` and `TG_API_HASH`.
+5. Run `npm run check && npm test`.
 
-Never commit .env or bot tokens.
+Never commit `.env` or bot tokens.
