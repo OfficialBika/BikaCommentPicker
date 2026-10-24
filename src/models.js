@@ -28,7 +28,13 @@ commentMessageSchema.index({giveawayId:1,createdAt:1});
 
 async function repairLegacyGroupIndexes({logger = console} = {}) {
  const collection = mongoose.connection.collection('groupchats');
- const indexes = await collection.indexes();
+ let indexes;
+ try { indexes = await collection.indexes(); }
+ catch (error) {
+  // First deployment into a newly-created collection can report NamespaceNotFound.
+  if (error.codeName === 'NamespaceNotFound' || error.code === 26) indexes = [];
+  else throw error;
+ }
  const legacy = indexes.filter(index =>
   index.unique === true &&
   index.key &&
