@@ -59,7 +59,7 @@ test('approval status is deny-by-default unless stored value is literal true',()
  assert.equal(approved(undefined),false);
 });
 test('approval target accepts Telegram numeric IDs and rejects names',()=>{
- const target=id=>typeof id==='string'&&/^-?\\d+$/.test(id.trim());
+ const target=id=>typeof id==='string'&&/^-?\d+$/.test(id.trim());
  assert.equal(target('-1001234567890'),true);
  assert.equal(target('123456'),true);
  assert.equal(target('@somegroup'),false);
