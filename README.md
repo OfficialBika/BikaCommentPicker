@@ -14,9 +14,8 @@ Production-focused Telegram giveaway/comment picker.
 - Isolated v2-pro branch; main remains untouched
 
 ## Commands
-- /start — help
+- `/start` — help
 - `/approvec` / `/approve` — Owner approves the current group (silently) or `/approvec <GROUP_ID>` from Owner private chat
-- /approve — legacy alias of `/approvec`
 - `/unapprove` — Owner revokes approval; from private chat use `/unapprove <GROUP_ID>`
 - `/approvegclist` — list the first 100 approved groups/channels (Owner only; run in private chat)
 - /giveaway 3 keyword — reply to a forwarded channel post to configure
