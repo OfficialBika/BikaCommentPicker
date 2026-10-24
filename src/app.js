@@ -481,6 +481,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
  }
 
  async function setManualStars(m,value){
+  if(!await requireApprovedGroup(m))return;
   if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ <b>OWNER ONLY</b>\n\nYou do not have permission to use this command.');
 
   const reply=m.reply_to_message;
