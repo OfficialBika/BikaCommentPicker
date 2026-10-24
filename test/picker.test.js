@@ -34,3 +34,18 @@ test('database schemas enforce one entry per user/giveaway and one mapping per c
  assert.equal(entryUnique,true);
  assert.equal(commentMessageUnique,true);
 });
+
+test('approval policy requires exact boolean approval and fails closed for missing chats',()=>{
+ const isApproved=(group)=>group?.approved===true;
+ assert.equal(isApproved({approved:true}),true);
+ assert.equal(isApproved({approved:false}),false);
+ assert.equal(isApproved({}),false);
+ assert.equal(isApproved(null),false);
+});
+test('approval commands use numeric chat IDs only',()=>{
+ const valid=id=>typeof id==='string'&&/^-?\\d+$/.test(id.trim());
+ assert.equal(valid('-1001234567890'),true);
+ assert.equal(valid('123456'),true);
+ assert.equal(valid('@publicgroup'),false);
+ assert.equal(valid(''),false);
+});
