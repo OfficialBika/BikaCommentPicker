@@ -15,4 +15,13 @@ const winnerSchema=new Schema({giveawayId:{type:Schema.Types.ObjectId,ref:'Givea
 winnerSchema.index({giveawayId:1,round:1,userId:1},{unique:true});
 const broadcastSchema=new Schema({text:String,targets:[{chatId:String,status:{type:String,enum:['pending','sent','failed'],default:'pending'},attempts:{type:Number,default:0},error:String}],status:{type:String,enum:['queued','running','completed','partial','failed'],default:'queued'},createdBy:String,startedAt:Date,finishedAt:Date},{timestamps:true});
 const auditSchema=new Schema({action:String,actorId:String,giveawayId:Schema.Types.ObjectId,targetId:String,meta:Schema.Types.Mixed,createdAt:{type:Date,default:Date.now}});
-module.exports={User:mongoose.model('UserV2',userSchema,'users'),Group:mongoose.model('GroupV2',groupSchema,'groupchats'),Giveaway:mongoose.model('GiveawayV2',giveawaySchema,'giveawayposts'),Entry:mongoose.model('EntryV2',entrySchema,'entries'),PaidReaction:mongoose.model('PaidReactionV2',paidReactionSchema,'paidreactions'),Winner:mongoose.model('WinnerV2',winnerSchema,'winnerhistories'),BroadcastJob:mongoose.model('BroadcastJobV2',broadcastSchema,'broadcastjobs'),AuditEvent:mongoose.model('AuditEventV2',auditSchema,'auditevents')};
+const commentMessageSchema=new Schema({
+ groupChatId:{type:String,required:true},
+ messageId:{type:Number,required:true},
+ giveawayId:{type:Schema.Types.ObjectId,ref:'Giveaway',required:true,index:true},
+ channelId:String,
+ channelPostId:Number
+},{timestamps:true});
+commentMessageSchema.index({groupChatId:1,messageId:1},{unique:true});
+commentMessageSchema.index({giveawayId:1,createdAt:1});
+module.exports={User:mongoose.model('UserV2',userSchema,'users'),Group:mongoose.model('GroupV2',groupSchema,'groupchats'),Giveaway:mongoose.model('GiveawayV2',giveawaySchema,'giveawayposts'),Entry:mongoose.model('EntryV2',entrySchema,'entries'),PaidReaction:mongoose.model('PaidReactionV2',paidReactionSchema,'paidreactions'),Winner:mongoose.model('WinnerV2',winnerSchema,'winnerhistories'),BroadcastJob:mongoose.model('BroadcastJobV2',broadcastSchema,'broadcastjobs'),AuditEvent:mongoose.model('AuditEventV2',auditSchema,'auditevents'),CommentMessage:mongoose.model('CommentMessageV2',commentMessageSchema,'commentmessages')};

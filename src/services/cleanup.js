@@ -1,4 +1,4 @@
-const {Giveaway,Entry,PaidReaction,AuditEvent}=require('../models');
+const {Giveaway,Entry,PaidReaction,AuditEvent,CommentMessage}=require('../models');
 
 function cutoffFromDays(days){
   const n=Math.max(1,Number(days)||90);
@@ -18,17 +18,19 @@ async function cleanupTemporaryGiveawayData({retentionDays=90,logger}={}){
   }).select('_id').lean();
 
   const ids=[...completed,...cancelledOrExpired].map(x=>x._id);
-  if(!ids.length)return {giveaways:0,entries:0,paidReactions:0};
+  if(!ids.length)return {giveaways:0,entries:0,paidReactions:0,commentMessages:0};
 
-  const [entries,paidReactions]=await Promise.all([
+  const [entries,paidReactions,commentMessages]=await Promise.all([
     Entry.deleteMany({giveawayId:{$in:ids}}),
-    PaidReaction.deleteMany({giveawayId:{$in:ids}})
+    PaidReaction.deleteMany({giveawayId:{$in:ids}}),
+    CommentMessage.deleteMany({giveawayId:{$in:ids}})
   ]);
 
   const result={
     giveaways:ids.length,
     entries:entries.deletedCount||0,
-    paidReactions:paidReactions.deletedCount||0
+    paidReactions:paidReactions.deletedCount||0,
+    commentMessages:commentMessages.deletedCount||0
   };
 
   if(logger)logger.info('Temporary giveaway data cleanup completed',{

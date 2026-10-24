@@ -119,9 +119,9 @@ async function pickWinners(id,count,options={}){
 }
 
 async function reroll(id,count){
- const g=await Giveaway.findById(id);
- if(!g)throw new Error('Giveaway not found.');
- if(g.status!=='completed')throw new Error('Giveaway must be completed before reroll.');
+ const g=await Giveaway.findOneAndUpdate({_id:id,status:'completed'},{$set:{status:'picking'},$inc:{stateVersion:1}},{new:true});
+ if(!g)throw new Error('Giveaway must be completed and not already being modified.');
+ try{
 
  const prior=await Winner.find({giveawayId:id}).select('userId').lean();
  const blocked=new Set(prior.map(x=>String(x.userId)));
@@ -137,16 +137,18 @@ async function reroll(id,count){
   firstName:u.firstName,lastName:u.lastName,rank:i+1,status:'winner'
  }));
  await Winner.insertMany(docs,{ordered:true});
- await Giveaway.updateOne(
-  {_id:id},
-  {$set:{pickRound:round,pickedAt:new Date()},$inc:{stateVersion:1}}
- );
- return {
-  giveaway:g,winners:docs,entryCount:selected.candidateCount,
-  candidateCount:selected.candidateCount,round
- };
+ const updated=await Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed',pickRound:round,pickedAt:new Date()},$inc:{stateVersion:1}});
+ if(!updated.modifiedCount)throw new Error('Giveaway state changed before reroll could be finalized.');
+ return {giveaway:g,winners:docs,entryCount:selected.candidateCount,candidateCount:selected.candidateCount,round};
+ }catch(e){
+  await Promise.all([
+   Winner.deleteMany({giveawayId:id,round:(g.pickRound||0)+1}),
+   Winner.updateMany({giveawayId:id,round:g.pickRound||0,status:'rerolled'},{$set:{status:'winner'}}),
+   Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed'},$inc:{stateVersion:1}})
+  ]).catch(()=>{});
+  throw e;
+ }
 }
-
 
 function secureUnit(){
  const n=crypto.randomBytes(6).readUIntBE(0,6);
@@ -282,9 +284,9 @@ async function pickStarWinners(id,count,options={}){
 
 
 async function rerollStarWinners(id,count){
- const g=await Giveaway.findById(id);
- if(!g)throw new Error('Giveaway not found.');
- if(g.status!=='completed')throw new Error('Giveaway must be completed before reroll.');
+ const g=await Giveaway.findOneAndUpdate({_id:id,status:'completed'},{$set:{status:'picking'},$inc:{stateVersion:1}},{new:true});
+ if(!g)throw new Error('Giveaway must be completed and not already being modified.');
+ try{
  const prior=await Winner.find({giveawayId:id}).select('userId').lean();
  const blocked=new Set(prior.map(x=>String(x.userId)));
  const selected=await selectRandomPaidReactors(id,count,blocked);
@@ -296,8 +298,17 @@ async function rerollStarWinners(id,count){
  const round=(g.pickRound||0)+1;
  const docs=selected.candidates.map((u,i)=>({giveawayId:id,round,userId:u.userId,username:u.username,firstName:u.firstName,lastName:u.lastName,starCount:u.starCount,selectionMode:'paid_star',rank:i+1,status:'winner'}));
  await Winner.insertMany(docs,{ordered:true});
- await Giveaway.updateOne({_id:id},{$set:{pickRound:round,pickedAt:new Date()},$inc:{stateVersion:1}});
+ const updated=await Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed',pickRound:round,pickedAt:new Date()},$inc:{stateVersion:1}});
+ if(!updated.modifiedCount)throw new Error('Giveaway state changed before Star reroll could be finalized.');
  return {giveaway:g,winners:docs,entryCount:selected.candidateCount,candidateCount:selected.candidateCount,round};
+ }catch(e){
+  await Promise.all([
+   Winner.deleteMany({giveawayId:id,round:(g.pickRound||0)+1}),
+   Winner.updateMany({giveawayId:id,round:g.pickRound||0,status:'rerolled'},{$set:{status:'winner'}}),
+   Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed'},$inc:{stateVersion:1}})
+  ]).catch(()=>{});
+  throw e;
+ }
 }
 
 module.exports={pickWinners,reroll,rerollStarWinners,pickStarWinners,sampleUnique,selectRandomEntries,selectRandomPaidReactors};

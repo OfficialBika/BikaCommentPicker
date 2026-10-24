@@ -1,7 +1,7 @@
 name: V2 Pro CI
 on:
   push:
-    branches: [v2-pro]
+    branches: [v2-pro, v2-pro-hardening-2026-10-24]
   pull_request:
     branches: [v2-pro]
 jobs:
