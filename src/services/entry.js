@@ -43,6 +43,7 @@ async function recordComment(giveaway,msg){
  const rules=giveaway.rules||{};
  if(rules.keyword&&!content.text.toLowerCase().includes(String(rules.keyword).toLowerCase()))return {ok:false,reason:'keyword'};
  if(rules.requireUsername&&!from.username)return {ok:false,reason:'username'};
+ if(rules.requireBotStart)return {ok:false,reason:'bot_start_not_implemented'};
  try{
   const doc=await Entry.findOneAndUpdate(
    {giveawayId:giveaway._id,userId:String(from.id)},
