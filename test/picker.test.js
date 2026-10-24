@@ -81,3 +81,26 @@ test('custom emoji HTML markup remains intact in result templates',()=>{
  const template='<tg-emoji emoji-id="123456">🏆</tg-emoji> <b>WINNERS</b>';
  assert.match(template,/<tg-emoji emoji-id="123456">🏆<\/tg-emoji>/);
 });
+const {repairLegacyGroupIndexes}=require('../src/models');
+
+test('legacy group index repair drops only the obsolete unique groupChatId index',async()=>{
+ const calls=[];
+ const legacy={name:'groupChatId_1',unique:true,key:{groupChatId:1}};
+ const unrelated={name:'title_1',unique:true,key:{title:1}};
+ const nonUnique={name:'groupChatId_1',unique:false,key:{groupChatId:1}};
+ const originalCollection=require('mongoose').connection.collection;
+ const originalCreateIndexes=require('../src/models').Group.createIndexes;
+ require('mongoose').connection.collection=()=>({
+  indexes:async()=>[legacy,unrelated,nonUnique],
+  dropIndex:async name=>calls.push(['drop',name])
+ });
+ require('../src/models').Group.createIndexes=async()=>calls.push(['createIndexes']);
+ try{
+  await repairLegacyGroupIndexes({logger:{warn:(...args)=>calls.push(['warn',...args])}});
+  assert.deepEqual(calls.filter(c=>c[0]==='drop'),[['drop','groupChatId_1']]);
+  assert.equal(calls.some(c=>c[0]==='createIndexes'),true);
+ }finally{
+  require('mongoose').connection.collection=originalCollection;
+  require('../src/models').Group.createIndexes=originalCreateIndexes;
+ }
+});
