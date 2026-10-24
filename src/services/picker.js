@@ -144,7 +144,7 @@ async function reroll(id,count){
   await Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed'},$inc:{stateVersion:1}}).catch(()=>{});
   throw e;
  }
-
+}
 
 function secureUnit(){
  const n=crypto.randomBytes(6).readUIntBE(0,6);
@@ -301,5 +301,6 @@ async function rerollStarWinners(id,count){
   await Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed'},$inc:{stateVersion:1}}).catch(()=>{});
   throw e;
  }
+}
 
 module.exports={pickWinners,reroll,rerollStarWinners,pickStarWinners,sampleUnique,selectRandomEntries,selectRandomPaidReactors};
