@@ -502,7 +502,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ <b>ADMIN ACCESS REQUIRED</b>\n\nOnly the group admin or bot owner can use this command.');if(!await requireApprovedGroup(m))return;
   const g=await findGiveaway(m,arg);
   if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply to the giveaway post or provide a valid Giveaway ID.');
-  const parsed=Number(arg||g.winnerCount||1);
+  const parsed=String(arg||'')===String(g._id)?Number(g.winnerCount||1):Number(arg||g.winnerCount||1);
   if(!Number.isInteger(parsed)||parsed<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.');
   if(parsed>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per pick is '+cfg.pickCountMax+'.');const n=parsed;
   const rollEmoji='<tg-emoji emoji-id="'+esc(cfg.rollingEmojiId)+'">🎰</tg-emoji>';
@@ -596,7 +596,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(reply){
    g=await findGiveaway(m);
    if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply to the giveaway post or provide a valid Giveaway ID.');
-   n=arg===undefined?Number(g.winnerCount||1):Number(arg);
+   n=(arg===undefined||String(arg)===String(g._id))?Number(g.winnerCount||1):Number(arg);
   }else{   const raw=String(arg||'');
    if(/^[0-9]+$/.test(raw)){
     const possibleCount=Number(raw);
@@ -717,7 +717,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
    if(p){try{await bot.editMessageText('⚠️ <b>PAID STAR DRAW FAILED</b>\n\n'+esc(e.message)+diagnostic+'\n\n<i>No winner result was published.</i>',{chat_id:m.chat.id,message_id:p.message_id,parse_mode:'HTML'});}catch{}}else await bot.sendMessage(m.chat.id,'❌ <b>PAID STAR PICK FAILED</b>\n\n'+esc(e.message)+diagnostic,{parse_mode:'HTML'});
   }
  }
- async function rerollCmd(m,arg){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ <b>ADMIN ACCESS REQUIRED</b>\n\nOnly the group admin or bot owner can use this command.');if(!await requireApprovedGroup(m))return;const g=await findGiveaway(m,arg);if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply to the giveaway post or provide its ID.');const raw=Number(arg||g.winnerCount||1);if(!Number.isInteger(raw)||raw<1)return bot.sendMessage(m.chat.id,'❌ Reroll count must be a whole number greater than 0.');if(raw>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per reroll is '+cfg.pickCountMax+'.');const n=raw;try{const latestWinner=await Winner.findOne({giveawayId:g._id,status:'winner'}).sort({round:-1}).lean();const r=latestWinner?.selectionMode==='paid_star'?await rerollStarWinners(g._id,n):await reroll(g._id,n);const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));await bot.sendMessage(m.chat.id,
+ async function rerollCmd(m,arg){if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ <b>ADMIN ACCESS REQUIRED</b>\n\nOnly the group admin or bot owner can use this command.');if(!await requireApprovedGroup(m))return;const g=await findGiveaway(m,arg);if(!g)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY NOT FOUND</b>\n\nReply to the giveaway post or provide its ID.');const raw=String(arg||'')===String(g._id)?Number(g.winnerCount||1):Number(arg||g.winnerCount||1);if(!Number.isInteger(raw)||raw<1)return bot.sendMessage(m.chat.id,'❌ Reroll count must be a whole number greater than 0.');if(raw>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per reroll is '+cfg.pickCountMax+'.');const n=raw;try{const latestWinner=await Winner.findOne({giveawayId:g._id,status:'winner'}).sort({round:-1}).lean();const r=latestWinner?.selectionMode==='paid_star'?await rerollStarWinners(g._id,n):await reroll(g._id,n);const lines=r.winners.map((w,i)=>(i+1)+'. '+mention({id:w.userId,firstName:w.firstName,lastName:w.lastName,username:w.username}));await bot.sendMessage(m.chat.id,
   '🔄 <b>REROLL COMPLETE</b>\n\n'+
   '━━━━━━━━━━━━━━━━━━\n\n'+
   '🎲 <b>Round</b>\n└ <b>'+r.round+'</b>\n\n'+
