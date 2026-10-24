@@ -134,7 +134,7 @@ async function start(){
   logger.warn('PUBLIC_URL is not configured; Telegram reaction updates cannot reach this webhook.');
  }
  async function saveUser(f){if(!f)return;await User.updateOne({id:String(f.id)},{$set:{username:f.username||'',firstName:f.first_name||'',lastName:f.last_name||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
- async function saveGroup(c){if(!c||!['group','supergroup'].includes(c.type))return;await Group.updateOne({id:String(c.id)},{$set:{title:c.title||'',type:c.type,username:c.username||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
+ async function saveGroup(c){if(!c||!['group','supergroup','channel'].includes(c.type))return;await Group.updateOne({id:String(c.id)},{$set:{title:c.title||'',type:c.type,username:c.username||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
  async function isApprovedGroup(chatId){if(chatId==null)return false;const group=await Group.findOne({id:String(chatId)}).select('approved').lean();return group?.approved===true;}
  async function handleUpdate(u){
   if(u.callback_query){
@@ -393,6 +393,7 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
  async function requireApprovedGroup(m){return ['group','supergroup','channel'].includes(m.chat?.type)&&await isApprovedGroup(m.chat.id);}
  async function resolveApprovalTarget(m,arg){if(arg){const raw=String(arg).trim();return /^-?\d+$/.test(raw)?raw:null;}if(['group','supergroup'].includes(m.chat?.type))return String(m.chat.id);return null;}
  async function command(m){const parts=(m.text||'').trim().split(/\s+/);const cmd=(parts[0]||'').split('@')[0].toLowerCase();
+  if(cmd==='/start')return bot.sendMessage(m.chat.id,'🎟️ <b>CMT PICKER V2 PRO</b>\n━━━━━━━━━━━━━━━━━━\n\n🎁 <b>Giveaway Picker</b>\n⭐ <b>Paid Star Picker</b>\n🔄 <b>Reroll & Winner History</b>\n🛡️ <b>Secure Admin Controls</b>\n\n━━━━━━━━━━━━━━━━━━\n✅ <i>System ready for secure winner selection.</i>',{parse_mode:'HTML'});
   if(cmd==='/approve'||cmd==='/approvec'){
    if(!await owner(m.from?.id))return;
    const target=await resolveApprovalTarget(m,parts[1]);if(!target)return bot.sendMessage(m.chat.id,'Usage: /approvec (inside a group) or /approvec <code>GROUP_ID</code>',{parse_mode:'HTML'});
