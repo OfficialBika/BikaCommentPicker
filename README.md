@@ -7,7 +7,8 @@ Production-focused Telegram giveaway/comment picker.
 - Reroll rounds exclude every previous winner
 - MongoDB-backed giveaway, entry, winner, broadcast and audit state
 - Keyword and username entry rules
-- Owner/admin permission checks
+- Owner/admin permission checks with owner-approved group enforcement
+- Telegram webhook secret-token verification
 - Telegram rate-limit retry handling for broadcasts
 - Health/readiness endpoints and graceful shutdown
 - Isolated v2-pro branch; main remains untouched
@@ -30,5 +31,6 @@ Production-focused Telegram giveaway/comment picker.
 4. npm test and npm run check
 5. npm start
 6. Set PUBLIC_URL to the HTTPS service URL for webhook registration
+7. Set WEBHOOK_SECRET_TOKEN to a random 1–256 character secret; requests without the matching Telegram secret header are rejected
 
 Never commit .env or bot tokens.
