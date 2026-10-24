@@ -4,7 +4,7 @@ const mongoose=require('mongoose');
 const {loadConfig}=require('./config');
 const {createLogger}=require('./utils/logger');
 const {esc,mention,progress}=require('./utils/format');
-const {User,Group,Giveaway,Entry,PaidReaction,Winner,BroadcastJob,AuditEvent}=require('./models');
+const {User,Group,Giveaway,Entry,PaidReaction,Winner,BroadcastJob,AuditEvent,CommentMessage}=require('./models');
 const {pickWinners,reroll,rerollStarWinners,pickStarWinners}=require('./services/picker');
 const {recordComment}=require('./services/entry');
 const {runBroadcast}=require('./services/broadcast');
@@ -72,6 +72,19 @@ async function start(){
  app.get('/ready',(_,res)=>res.status(mongoose.connection.readyState===1?200:503).json({ok:mongoose.connection.readyState===1}));
  const path='/telegram/comments_picker_v2_webhook';
  const allowedUpdates=['message','channel_post','callback_query','message_reaction','message_reaction_count'];
+ const updateQueues=new Map();
+ function updateQueueKey(u){
+  const chatId=u?.message?.chat?.id??u?.channel_post?.chat?.id??u?.message_reaction?.chat?.id??u?.message_reaction_count?.chat?.id;
+  return chatId==null?'other':String(chatId);
+ }
+ function enqueueUpdate(u){
+  const key=updateQueueKey(u);
+  const previous=updateQueues.get(key)||Promise.resolve();
+  const task=previous.catch(()=>{}).then(()=>handleUpdate(u));
+  updateQueues.set(key,task);
+  task.then(()=>{if(updateQueues.get(key)===task)updateQueues.delete(key);},()=>{if(updateQueues.get(key)===task)updateQueues.delete(key);});
+  return task;
+ }
  app.post(path,(req,res)=>{
   const supplied=req.get('X-Telegram-Bot-Api-Secret-Token')||'';
   const expected=Buffer.from(cfg.webhookSecretToken);
@@ -82,7 +95,7 @@ async function start(){
    return res.status(403).json({ok:false});
   }
   res.status(200).json({ok:true});
-  Promise.resolve(handleUpdate(req.body)).catch(e=>{logger.error('update error',e.stack||e.message);});
+  Promise.resolve(enqueueUpdate(req.body)).catch(e=>{logger.error('update error',e.stack||e.message);});
  });
  const server=app.listen(cfg.port);
  await new Promise((resolve,reject)=>{
@@ -93,7 +106,7 @@ async function start(){
  if(cfg.publicUrl){
   const webhookUrl=cfg.publicUrl.replace(/\/$/,'')+path;
   try{
-   const result=await bot.setWebHook(webhookUrl,{allowed_updates:allowedUpdates,secret_token:cfg.webhookSecretToken});
+   const result=await bot.setWebHook(webhookUrl,{allowed_updates:allowedUpdates,secret_token:cfg.webhookSecretToken,max_connections:1});
    logger.info('Telegram webhook configured',{url:webhookUrl,result,allowedUpdates});
   }catch(e){
    logger.error('Telegram webhook setup failed: '+(e.message||e));
@@ -157,6 +170,14 @@ async function start(){
     return g;
    }
   }
+  const parent=msg?.reply_to_message;
+  if(parent&&msg.chat?.id!=null){
+   const linked=await CommentMessage.findOne({groupChatId:String(msg.chat.id),messageId:Number(parent.message_id)}).select('giveawayId').lean();
+   if(linked){
+    const linkedGiveaway=await Giveaway.findOne({_id:linked.giveawayId,discussionChatId:String(msg.chat.id)});
+    if(linkedGiveaway)return linkedGiveaway;
+   }
+  }
   const r=msg.reply_to_message;
   if(r){
    const postId=r.forward_from_message_id||r.message_id;
@@ -175,21 +196,56 @@ async function start(){
   }
   return null;
  }
+ async function resolveCommentGiveaway(msg){
+  const parent=msg?.reply_to_message;
+  if(!parent||!['group','supergroup'].includes(msg.chat?.type))return null;
+  const chatId=String(msg.chat.id);
+  const origin=extractChannelOrigin(msg);
+  if(origin){
+   const g=await Giveaway.findOne({channelId:origin.channelId,channelPostId:origin.channelPostId}).sort({createdAt:-1});
+   if(!g)return null;
+   if(g.discussionChatId&&String(g.discussionChatId)!==chatId)return null;
+   if(!g.discussionChatId){g.discussionChatId=chatId;await g.save();}
+   return g;
+  }
+  const parentId=Number(parent.message_id);
+  if(!Number.isSafeInteger(parentId)||parentId<1)return null;
+  const linked=await CommentMessage.findOne({groupChatId:chatId,messageId:parentId}).select('giveawayId').lean();
+  if(linked)return Giveaway.findOne({_id:linked.giveawayId,discussionChatId:chatId});
+  const legacyEntry=await Entry.findOne({groupChatId:chatId,commentMessageId:parentId}).select('giveawayId').lean();
+  if(legacyEntry)return Giveaway.findOne({_id:legacyEntry.giveawayId,discussionChatId:chatId});
+  return null;
+ }
+ async function rememberCommentMessage(giveaway,msg){
+  const groupChatId=String(msg.chat.id),messageId=Number(msg.message_id);
+  if(!Number.isSafeInteger(messageId)||messageId<1)throw new Error('Invalid comment message ID.');
+  const key={groupChatId,messageId};
+  try{
+   await CommentMessage.updateOne(key,{$setOnInsert:{
+    ...key,giveawayId:giveaway._id,channelId:giveaway.channelId,channelPostId:giveaway.channelPostId
+   }},{upsert:true});
+  }catch(e){if(e.code!==11000)throw e;}
+  const mapping=await CommentMessage.findOne(key).select('giveawayId').lean();
+  if(!mapping||String(mapping.giveawayId)!==String(giveaway._id))throw new Error('Comment message is already linked to a different giveaway.');
+ }
  async function comment(m){
-  if(!['group','supergroup'].includes(m.chat.type)||!m.from||m.from.is_bot)return;
+  if(!['group','supergroup'].includes(m.chat.type)||!m.reply_to_message)return;
   const group=await Group.findOne({id:String(m.chat.id)}).select('approved').lean();
   if(group?.approved!==true)return;
-  const g=await findGiveaway(m);
-  if(g?.status!=='active')return;
-  if(!g.discussionChatId){g.discussionChatId=String(m.chat.id);await g.save();}
+  const g=await resolveCommentGiveaway(m);
+  if(!g)return;
+  await rememberCommentMessage(g,m);
+  if(g.status!=='active')return;
+  if(!m.from||m.from.is_bot)return;
+  let forceRejectReason=null;
   if(g.rules?.excludeAdmins){
    const member=await bot.getChatMember(m.chat.id,m.from.id).catch(()=>null);
    if(member&&['administrator','creator'].includes(member.status)){
+    forceRejectReason='admin';
     await AuditEvent.create({action:'entry_rejected_admin',actorId:String(m.from.id),giveawayId:g._id,targetId:String(m.message_id),meta:{chatId:String(m.chat.id)}}).catch(()=>{});
-    return;
    }
   }
-  await recordComment(g,m);
+  await recordComment(g,m,{forceRejectReason});
  }
 function customEmoji(id,fallback){
  const safeId=String(id??'').trim();
