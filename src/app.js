@@ -161,39 +161,25 @@ async function start(){
   }
   const origin=extractChannelOrigin(msg);
   if(origin){
-   const g=await Giveaway.findOne({channelId:origin.channelId,channelPostId:origin.channelPostId}).sort({createdAt:-1});
-   if(g){
-    if(!g.discussionChatId&&['group','supergroup'].includes(msg.chat?.type)){
-     g.discussionChatId=String(msg.chat.id);
-     await g.save();
-    }
-    return g;
+   const exact=await Giveaway.findOne({channelId:origin.channelId,channelPostId:origin.channelPostId}).sort({createdAt:-1});
+   if(!exact)return null;
+   if(exact.discussionChatId&&String(exact.discussionChatId)!==String(msg.chat.id))return null;
+   if(!exact.discussionChatId&&['group','supergroup'].includes(msg.chat?.type)){
+    exact.discussionChatId=String(msg.chat.id);
+    await exact.save();
    }
+   return exact;
   }
   const parent=msg?.reply_to_message;
-  if(parent&&msg.chat?.id!=null){
-   const linked=await CommentMessage.findOne({groupChatId:String(msg.chat.id),messageId:Number(parent.message_id)}).select('giveawayId').lean();
-   if(linked){
-    const linkedGiveaway=await Giveaway.findOne({_id:linked.giveawayId,discussionChatId:String(msg.chat.id)});
-    if(linkedGiveaway)return linkedGiveaway;
-   }
-  }
-  const r=msg.reply_to_message;
-  if(r){
-   const postId=r.forward_from_message_id||r.message_id;
-   const ch=String(r.forward_from_chat?.id||r.chat?.id||'');
-   const g=await Giveaway.findOne({channelPostId:postId,$or:[{channelId:ch},{discussionChatId:String(msg.chat.id)}]}).sort({createdAt:-1});
-   if(g)return g;
-  }
-  // Commands posted anywhere in the giveaway discussion chat should resolve
-  // to the active giveaway even when the command replies to another comment.
-  if(['group','supergroup'].includes(msg.chat?.type)){
-   const g=await Giveaway.findOne({
-    discussionChatId:String(msg.chat.id),
-    status:{$in:['active','picking']}
-   }).sort({createdAt:-1});
-   if(g)return g;
-  }
+  if(!parent||msg.chat?.id==null)return null;
+  const groupChatId=String(msg.chat.id),messageId=Number(parent.message_id);
+  if(!Number.isSafeInteger(messageId)||messageId<1)return null;
+  const linked=await CommentMessage.findOne({groupChatId,messageId}).select('giveawayId').lean();
+  if(linked)return Giveaway.findOne({_id:linked.giveawayId,discussionChatId:groupChatId});
+  // Backward compatibility for first comments recorded before thread mapping existed.
+  const legacyEntry=await Entry.findOne({groupChatId,commentMessageId:messageId}).select('giveawayId').lean();
+  if(legacyEntry)return Giveaway.findOne({_id:legacyEntry.giveawayId,discussionChatId:groupChatId});
+  // Never guess based on the latest active giveaway in a shared discussion group.
   return null;
  }
  async function resolveCommentGiveaway(msg){
