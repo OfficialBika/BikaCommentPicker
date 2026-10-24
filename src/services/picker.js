@@ -141,7 +141,11 @@ async function reroll(id,count){
  if(!updated.modifiedCount)throw new Error('Giveaway state changed before reroll could be finalized.');
  return {giveaway:g,winners:docs,entryCount:selected.candidateCount,candidateCount:selected.candidateCount,round};
  }catch(e){
-  await Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed'},$inc:{stateVersion:1}}).catch(()=>{});
+  await Promise.all([
+   Winner.deleteMany({giveawayId:id,round:(g.pickRound||0)+1}),
+   Winner.updateMany({giveawayId:id,round:g.pickRound||0,status:'rerolled'},{$set:{status:'winner'}}),
+   Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed'},$inc:{stateVersion:1}})
+  ]).catch(()=>{});
   throw e;
  }
 }
@@ -298,7 +302,11 @@ async function rerollStarWinners(id,count){
  if(!updated.modifiedCount)throw new Error('Giveaway state changed before Star reroll could be finalized.');
  return {giveaway:g,winners:docs,entryCount:selected.candidateCount,candidateCount:selected.candidateCount,round};
  }catch(e){
-  await Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed'},$inc:{stateVersion:1}}).catch(()=>{});
+  await Promise.all([
+   Winner.deleteMany({giveawayId:id,round:(g.pickRound||0)+1}),
+   Winner.updateMany({giveawayId:id,round:g.pickRound||0,status:'rerolled'},{$set:{status:'winner'}}),
+   Giveaway.updateOne({_id:id,status:'picking'},{$set:{status:'completed'},$inc:{stateVersion:1}})
+  ]).catch(()=>{});
   throw e;
  }
 }
