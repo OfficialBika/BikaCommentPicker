@@ -4,6 +4,7 @@ const crypto=require('crypto');
 const {sampleUnique}=require('../src/services/picker');
 const {commentContent,detectCommentType,isEarlierMessageId,rejectionReason}=require('../src/services/entry');
 const {Entry,CommentMessage}=require('../src/models');
+const {esc,mention,progress,paginate,normalizeMessageText,formatMessage}=require('../src/utils/format');
 
 test('sampleUnique returns exactly N unique documents',()=>{const input=Array.from({length:1000},(_,i)=>({id:i}));const out=sampleUnique(input,100);assert.equal(out.length,100);assert.equal(new Set(out.map(x=>x.id)).size,100);assert.ok(out.every(x=>x&&Number.isInteger(x.id)));});
 test('sampleUnique never returns more than input size',()=>assert.deepEqual(sampleUnique([1,2,3],10).sort((a,b)=>a-b),[1,2,3]));
@@ -64,4 +65,19 @@ test('approval target accepts Telegram numeric IDs and rejects names',()=>{
  assert.equal(target('123456'),true);
  assert.equal(target('@somegroup'),false);
  assert.equal(target(''),false);
+});
+
+test('winner pagination returns all records without gaps or overlap',()=>{
+ const input=Array.from({length:23},(_,i)=>({id:i+1}));
+ const a=paginate(input,1,10),b=paginate(input,2,10),c=paginate(input,3,10);
+ assert.equal(a.totalPages,3);assert.equal(a.items.length,10);assert.equal(b.items.length,10);assert.equal(c.items.length,3);
+ assert.deepEqual([...a.items,...b.items,...c.items].map(x=>x.id),input.map(x=>x.id));
+});
+test('normalizes literal slash-n and CRLF without collapsing intended line breaks',()=>{
+ assert.equal(normalizeMessageText('one\\n two\\r\\n three\\rfour'),'one\n two\n three\nfour');
+ assert.equal(formatMessage(['one','','','two']),'one\n\ntwo');
+});
+test('custom emoji HTML markup remains intact in result templates',()=>{
+ const template='<tg-emoji emoji-id="123456">🏆</tg-emoji> <b>WINNERS</b>';
+ assert.match(template,/<tg-emoji emoji-id="123456">🏆<\/tg-emoji>/);
 });
