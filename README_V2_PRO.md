@@ -16,7 +16,10 @@ This file documents the isolated V2 Pro development line. The V1 main branch rem
 
 ## Planned commands
 - /start
-- /approve
+- /approvec — approve current group or `/approvec <GROUP_ID>` (Owner only)
+- /unapprove — revoke current group or `/unapprove <GROUP_ID>` (Owner only)
+- /approvegclist — show approved groups/channels (Owner only)
+- /approve — legacy alias of `/approvec`
 - /admin
 - /broadcast
 - /pickwinner [count]
@@ -48,6 +51,7 @@ V2 Pro supports a dedicated `/pickstarwinner` flow for Telegram's paid Star reac
 ### Required Telegram setup
 
 - The bot must be an administrator in the giveaway channel so Telegram can deliver `message_reaction` updates.
+- Group commands and giveaway collection run only in explicitly owner-approved groups; channel posts/reactions are processed only for approved channels. Unapproved chats are silently ignored.
 - The webhook explicitly subscribes to `message_reaction` and `message_reaction_count`; Telegram's default allowed-updates list excludes reaction updates.
 - Paid Star reactions are identified by reaction type `paid`, not by the ordinary ⭐ emoji.
 
