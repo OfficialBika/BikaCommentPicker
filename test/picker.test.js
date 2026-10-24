@@ -49,3 +49,19 @@ test('approval commands use numeric chat IDs only',()=>{
  assert.equal(valid('@publicgroup'),false);
  assert.equal(valid(''),false);
 });
+
+test('approval status is deny-by-default unless stored value is literal true',()=>{
+ const approved=group=>group?.approved===true;
+ assert.equal(approved({approved:true}),true);
+ assert.equal(approved({approved:1}),false);
+ assert.equal(approved({approved:'true'}),false);
+ assert.equal(approved({approved:false}),false);
+ assert.equal(approved(undefined),false);
+});
+test('approval target accepts Telegram numeric IDs and rejects names',()=>{
+ const target=id=>typeof id==='string'&&/^-?\\d+$/.test(id.trim());
+ assert.equal(target('-1001234567890'),true);
+ assert.equal(target('123456'),true);
+ assert.equal(target('@somegroup'),false);
+ assert.equal(target(''),false);
+});
