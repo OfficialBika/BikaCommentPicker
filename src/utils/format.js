@@ -18,7 +18,7 @@ function paginate(items,page=1,pageSize=10){
 }
 function normalizeMessageText(value){
  const text=String(value??'');
- return text.replace(/\\\\n/g,'\n').replace(/\\r\n/g,'\n').replace(/\\r/g,'\n').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+ return text.replace(/\\\\n/g,'\n').replace(/\\r\\n/g,'\n').replace(/\\r/g,'\n').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
 }
 function formatMessage(lines,{maxBlankLines=1}={}){
  const input=Array.isArray(lines)?lines:[lines];
