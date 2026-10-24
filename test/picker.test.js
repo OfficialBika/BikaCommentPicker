@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 const crypto=require('crypto');
 const {sampleUnique}=require('../src/services/picker');
 const {commentContent,detectCommentType,isEarlierMessageId,rejectionReason}=require('../src/services/entry');
+const {Entry,CommentMessage}=require('../src/models');
 
 test('sampleUnique returns exactly N unique documents',()=>{const input=Array.from({length:1000},(_,i)=>({id:i}));const out=sampleUnique(input,100);assert.equal(out.length,100);assert.equal(new Set(out.map(x=>x.id)).size,100);assert.ok(out.every(x=>x&&Number.isInteger(x.id)));});
 test('sampleUnique never returns more than input size',()=>assert.deepEqual(sampleUnique([1,2,3],10).sort((a,b)=>a-b),[1,2,3]));
@@ -25,4 +26,11 @@ test('the first comment reserves the entry even when entry rules reject it',()=>
  assert.equal(rejectionReason(giveaway,msg,commentContent(msg),null),'keyword');
  assert.equal(rejectionReason({rules:{requireUsername:true}},{from:{}},commentContent({text:'hello'}),null),'username');
  assert.equal(rejectionReason({rules:{}},{from:{}},commentContent({text:'hello'}),'admin'),'admin');
+});
+
+test('database schemas enforce one entry per user/giveaway and one mapping per chat message',()=>{
+ const entryUnique=Entry.schema.indexes().some(([keys,options])=>options?.unique===true&&keys.giveawayId===1&&keys.userId===1);
+ const commentMessageUnique=CommentMessage.schema.indexes().some(([keys,options])=>options?.unique===true&&keys.groupChatId===1&&keys.messageId===1);
+ assert.equal(entryUnique,true);
+ assert.equal(commentMessageUnique,true);
 });
