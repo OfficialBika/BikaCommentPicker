@@ -163,8 +163,8 @@ async function start(){
   }
   if(!['group','supergroup','channel'].includes(m.chat.type))return;
   if(!(await isApprovedGroup(m.chat.id))){
-   // Permit only a deliberate, Owner-only silent approval command in an unapproved group.
-   if(['group','supergroup'].includes(m.chat.type)&&u.message&&m.from&&String(m.from.id)===String(cfg.ownerId)&&/^\/(?:approvec|approve)(?:@\w+)?$/i.test(String(m.text||'').trim())){
+   // Only the configured Owner may approve a group in place; this path never sends a bot message.
+   if(['group','supergroup'].includes(m.chat.type)&&u.message?.text&&m.from&&String(m.from.id)===String(cfg.ownerId)&&/^\/(?:approvec|approve)(?:@\w+)?$/i.test(String(m.text).trim())){
     await Group.updateOne({id:String(m.chat.id)},{$set:{approved:true,title:m.chat.title||'',type:m.chat.type,username:m.chat.username||'',lastSeenAt:new Date()}},{upsert:true});
    }
    return;
