@@ -1,4 +1,4 @@
-const required = ['BOT_TOKEN', 'MONGO_URI'];
+const required = ['BOT_TOKEN', 'MONGO_URI', 'OWNER_ID', 'PUBLIC_URL', 'WEBHOOK_SECRET_TOKEN'];
 function intEnv(name, fallback, min, max) {
   const value = process.env[name] === undefined || process.env[name] === '' ? fallback : Number(process.env[name]);
   if (!Number.isInteger(value) || value < min || value > max) throw new Error('Invalid ' + name + ': expected integer ' + min + '-' + max);
@@ -7,7 +7,7 @@ function intEnv(name, fallback, min, max) {
 function loadConfig() {
   for (const key of required) if (!process.env[key]) throw new Error('Missing required environment variable: ' + key);
   return Object.freeze({
-    botToken: process.env.BOT_TOKEN, mongoUri: process.env.MONGO_URI, ownerId: String(process.env.OWNER_ID || ''),
+    botToken: process.env.BOT_TOKEN, mongoUri: process.env.MONGO_URI, ownerId: String(process.env.OWNER_ID || '').trim(), webhookSecretToken: process.env.WEBHOOK_SECRET_TOKEN || '',
     mentionTag: process.env.MENTION_TAG || '@CommentsPickerBot', logoUrl: process.env.LOGO_URL || '', publicUrl: process.env.PUBLIC_URL || '',
     port: intEnv('PORT', 3000, 1, 65535), telegramApiId: process.env.TG_API_ID ? intEnv('TG_API_ID', 1, 1, 2147483647) : null, telegramApiHash: process.env.TG_API_HASH || '', timezone: process.env.TIMEZONE || 'Asia/Yangon', nodeEnv: process.env.NODE_ENV || 'production',
     pickCountMax: intEnv('PICK_COUNT_MAX', 20, 1, 100), rollDurationSeconds: intEnv('ROLL_DURATION_SECONDS', 20, 0, 120),
