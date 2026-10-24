@@ -162,14 +162,14 @@ async function start(){
    return;
   }
   if(!['group','supergroup','channel'].includes(m.chat.type))return;
-  await saveGroup(m.chat);
   if(!(await isApprovedGroup(m.chat.id))){
-   // Owner can approve this exact group without causing any bot message in it.
-   if(u.message&&m.from&&String(m.from.id)===String(cfg.ownerId)&&/^[\/!]?(?:approvec|approve)(?:@\w+)?$/i.test(String(m.text||'').trim())){
+   // Owner's current-group approval command is processed silently; every other update is dropped.
+   if(['group','supergroup'].includes(m.chat.type)&&u.message&&m.from&&String(m.from.id)===String(cfg.ownerId)&&/^\/(?:approvec|approve)(?:@\w+)?$/i.test(String(m.text||'').trim())){
     await Group.updateOne({id:String(m.chat.id)},{$set:{approved:true,title:m.chat.title||'',type:m.chat.type,username:m.chat.username||'',lastSeenAt:new Date()}},{upsert:true});
    }
    return;
   }
+  await saveGroup(m.chat);
   if(u.message?.text&&(/^(?:\/|\.s(?:\s|$))/i.test(u.message.text))){
    if(m.from)await saveUser(m.from);
    return command(u.message);
