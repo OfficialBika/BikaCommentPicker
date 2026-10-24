@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node index.js",
     "test": "node --test",
-    "check": "node --check index.js && node --check src/app.js"
+    "check": "node --check index.js && node --check src/app.js && node --check src/services/picker.js && node --check src/services/entry.js && node --check src/config.js"
   },
   "engines": {
     "node": ">=18"
