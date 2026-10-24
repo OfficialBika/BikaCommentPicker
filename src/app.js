@@ -163,7 +163,7 @@ async function start(){
   }
   if(!['group','supergroup','channel'].includes(m.chat.type))return;
   if(!(await isApprovedGroup(m.chat.id))){
-   // Owner's current-group approval command is processed silently; every other update is dropped.
+   // The only accepted unapproved-group update is an Owner approval command, processed silently.
    if(['group','supergroup'].includes(m.chat.type)&&u.message&&m.from&&String(m.from.id)===String(cfg.ownerId)&&/^\/(?:approvec|approve)(?:@\w+)?$/i.test(String(m.text||'').trim())){
     await Group.updateOne({id:String(m.chat.id)},{$set:{approved:true,title:m.chat.title||'',type:m.chat.type,username:m.chat.username||'',lastSeenAt:new Date()}},{upsert:true});
    }
