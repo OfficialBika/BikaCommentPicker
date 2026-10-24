@@ -3,7 +3,6 @@ function mention(u){
  const id=String(u?.id??'').trim();
  const name=[u?.firstName,u?.lastName].filter(Boolean).join(' ')||u?.username||'User';
  const label=u?.username?'@'+u.username:name;
- // Numeric IDs keep mentions stable when usernames are absent or change.
  if(/^\d+$/.test(id))return '<a href="tg://user?id='+id+'">'+esc(label)+'</a>';
  return esc(label);
 }
