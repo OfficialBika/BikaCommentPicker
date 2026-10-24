@@ -4,7 +4,7 @@ const mongoose=require('mongoose');
 const {loadConfig}=require('./config');
 const {createLogger}=require('./utils/logger');
 const {esc,mention,progress,paginate,formatMessage}=require('./utils/format');
-const {User,Group,Giveaway,Entry,PaidReaction,Winner,BroadcastJob,AuditEvent,CommentMessage}=require('./models');
+const {User,Group,Giveaway,Entry,PaidReaction,Winner,BroadcastJob,AuditEvent,CommentMessage,repairLegacyGroupIndexes}=require('./models');
 const {pickWinners,reroll,rerollStarWinners,pickStarWinners}=require('./services/picker');
 const {recordComment}=require('./services/entry');
 const {runBroadcast}=require('./services/broadcast');
@@ -14,8 +14,9 @@ const {createPaidStarClient,syncPaidStarReactors,paidStarMtStatus}=require('./se
 async function start(){
  const cfg=loadConfig();const logger=createLogger(cfg.logLevel);
  await mongoose.connect(cfg.mongoUri,{serverSelectionTimeoutMS:10000});
+ await repairLegacyGroupIndexes({logger});
  await Promise.all([Entry.createIndexes(),CommentMessage.createIndexes()]);
- logger.info('MongoDB connected; comment identity indexes ready');
+ logger.info('MongoDB connected; model indexes ready');
  await cleanupTemporaryGiveawayData({retentionDays:cfg.tempDataRetentionDays,logger}).catch(e=>logger.warn('Initial temporary-data cleanup failed: '+(e.message||e)));
  const cleanupTimer=setInterval(()=>cleanupTemporaryGiveawayData({retentionDays:cfg.tempDataRetentionDays,logger}).catch(e=>logger.warn('Scheduled temporary-data cleanup failed: '+(e.message||e))),cfg.cleanupIntervalMinutes*60*1000);
  cleanupTimer.unref?.();
@@ -82,11 +83,14 @@ async function start(){
    logger.info('Telegram webhook configured',{url:webhookUrl,result,allowedUpdates});
   }catch(e){logger.error('Telegram webhook setup failed: '+(e.message||e));throw e;}
   try{
-   const wh=await bot.getWebHookInfo(),actualAllowed=Array.isArray(wh.allowed_updates)?wh.allowed_updates:[];
+   const wh=await bot.getWebHookInfo();
+   const actualAllowed=Array.isArray(wh.allowed_updates)?wh.allowed_updates:null;
    logger.info('Telegram webhook ready',{url:wh.url||'',pending:wh.pending_update_count||0,allowed:actualAllowed,lastError:wh.last_error_message||null});
    if(wh.url!==webhookUrl)logger.warn('Telegram webhook URL mismatch');
-   if(!actualAllowed.includes('message_reaction'))logger.warn('Telegram webhook is missing message_reaction');
-   if(!actualAllowed.includes('message_reaction_count'))logger.warn('Telegram webhook is missing message_reaction_count');
+   // Telegram may omit allowed_updates when the effective setting is its default;
+   // do not incorrectly report missing reaction updates when no explicit list is returned.
+   if(actualAllowed && !actualAllowed.includes('message_reaction'))logger.warn('Telegram webhook explicitly excludes message_reaction');
+   if(actualAllowed && !actualAllowed.includes('message_reaction_count'))logger.warn('Telegram webhook explicitly excludes message_reaction_count');
    if(wh.last_error_message)logger.warn('Telegram reports a previous webhook delivery error; verify /health and the POST endpoint before treating this as a current failure.');
   }catch(e){logger.warn('Unable to verify Telegram webhook: '+(e.message||e));}
  }else logger.warn('PUBLIC_URL is not configured; Telegram reaction updates cannot reach this webhook.');
