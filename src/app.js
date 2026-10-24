@@ -137,15 +137,37 @@ async function start(){
  async function saveGroup(c){if(!c||!['group','supergroup'].includes(c.type))return;await Group.updateOne({id:String(c.id)},{$set:{title:c.title||'',type:c.type,username:c.username||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
  async function isApprovedGroup(chatId){if(chatId==null)return false;const group=await Group.findOne({id:String(chatId)}).select('approved').lean();return group?.approved===true;}
  async function handleUpdate(u){
-  if(u.callback_query){const chat=u.callback_query.message?.chat;if(chat&&['group','supergroup','channel'].includes(chat.type)&&!(await isApprovedGroup(chat.id)))return;return callback(u.callback_query);}
-  if(u.message_reaction){const chat=u.message_reaction.chat;if(!chat||chat.type!=='channel'||!(await Giveaway.exists({channelId:String(chat.id),channelPostId:Number(u.message_reaction.message_id)})))return;return reactionUpdate(u.message_reaction);}
-  if(u.message_reaction_count){const chat=u.message_reaction_count.chat;if(!chat||chat.type!=='channel'||!(await Giveaway.exists({channelId:String(chat.id),channelPostId:Number(u.message_reaction_count.message_id)})))return;return reactionCountUpdate(u.message_reaction_count);}
-  const m=u.message||u.channel_post;if(!m?.chat)return;
-  if(m.chat.type==='private'){if(u.message?.text&&(/^(?:\/|\.s(?:\s|$))/i.test(u.message.text))){if(m.from)await saveUser(m.from);return command(u.message);}return;}
+  if(u.callback_query){
+   const chat=u.callback_query.message?.chat;
+   if(chat&&['group','supergroup','channel'].includes(chat.type)&&!(await isApprovedGroup(chat.id)))return;
+   return callback(u.callback_query);
+  }
+  if(u.message_reaction){
+   const chat=u.message_reaction.chat;
+   if(!chat||chat.type!=='channel'||!(await Giveaway.exists({channelId:String(chat.id),channelPostId:Number(u.message_reaction.message_id)})))return;
+   return reactionUpdate(u.message_reaction);
+  }
+  if(u.message_reaction_count){
+   const chat=u.message_reaction_count.chat;
+   if(!chat||chat.type!=='channel'||!(await Giveaway.exists({channelId:String(chat.id),channelPostId:Number(u.message_reaction_count.message_id)})))return;
+   return reactionCountUpdate(u.message_reaction_count);
+  }
+  const m=u.message||u.channel_post;
+  if(!m?.chat)return;
+  if(m.chat.type==='private'){
+   if(u.message?.text&&(/^(?:\/|\.s(?:\s|$))/i.test(u.message.text))){
+    if(m.from)await saveUser(m.from);
+    return command(u.message);
+   }
+   return;
+  }
   if(!['group','supergroup','channel'].includes(m.chat.type))return;
   await saveGroup(m.chat);
   if(!(await isApprovedGroup(m.chat.id)))return;
-  if(u.message?.text&&(/^(?:\/|\.s(?:\s|$))/i.test(u.message.text))){if(m.from)await saveUser(m.from);return command(u.message);}
+  if(u.message?.text&&(/^(?:\/|\.s(?:\s|$))/i.test(u.message.text))){
+   if(m.from)await saveUser(m.from);
+   return command(u.message);
+  }
   if(u.channel_post)return channelPost(u.channel_post);
   if(m.reply_to_message)return comment(m);
  }
