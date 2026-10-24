@@ -135,8 +135,21 @@ async function start(){
  }
  async function saveUser(f){if(!f)return;await User.updateOne({id:String(f.id)},{$set:{username:f.username||'',firstName:f.first_name||'',lastName:f.last_name||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
  async function saveGroup(c){if(!c||!['group','supergroup'].includes(c.type))return;await Group.updateOne({id:String(c.id)},{$set:{title:c.title||'',type:c.type,username:c.username||'',lastSeenAt:new Date()}},{upsert:true}).catch(()=>{});}
- async function handleUpdate(u){if(u.callback_query)return callback(u.callback_query);if(u.message_reaction)return reactionUpdate(u.message_reaction);if(u.message_reaction_count)return reactionCountUpdate(u.message_reaction_count);const m=u.message||u.channel_post;if(u.message?.text&&(/^(?:\/|\.s(?:\s|$))/i.test(u.message.text))){if(m?.from)await saveUser(m.from);if(m?.chat)await saveGroup(m.chat);return command(u.message);}if(u.channel_post){if(m?.chat)await saveGroup(m.chat);return channelPost(u.channel_post);}if(m?.reply_to_message)return comment(m);}
- async function channelPost(p){const text=p.text||p.caption||'';if(!text.toLowerCase().includes(cfg.mentionTag.toLowerCase()))return;await Giveaway.findOneAndUpdate({channelId:String(p.chat.id),channelPostId:p.message_id},{$setOnInsert:{channelId:String(p.chat.id),channelPostId:p.message_id,title:text.slice(0,120),status:'active',winnerCount:1,durationSeconds:cfg.rollDurationSeconds,createdAt:new Date()}},{upsert:true,new:true});}
+ async function isApprovedGroup(chatId){if(chatId==null)return false;const group=await Group.findOne({id:String(chatId)}).select('approved').lean();return group?.approved===true;}
+ async function handleUpdate(u){
+  if(u.callback_query){const chat=u.callback_query.message?.chat;if(chat&&['group','supergroup','channel'].includes(chat.type)&&!(await isApprovedGroup(chat.id)))return;return callback(u.callback_query);}
+  if(u.message_reaction){const chat=u.message_reaction.chat;if(!chat||chat.type!=='channel'||!(await Giveaway.exists({channelId:String(chat.id),channelPostId:Number(u.message_reaction.message_id)})))return;return reactionUpdate(u.message_reaction);}
+  if(u.message_reaction_count){const chat=u.message_reaction_count.chat;if(!chat||chat.type!=='channel'||!(await Giveaway.exists({channelId:String(chat.id),channelPostId:Number(u.message_reaction_count.message_id)})))return;return reactionCountUpdate(u.message_reaction_count);}
+  const m=u.message||u.channel_post;if(!m?.chat)return;
+  if(m.chat.type==='private'){if(u.message?.text&&(/^(?:\\/|\\.s(?:\\s|$))/i.test(u.message.text))){if(m.from)await saveUser(m.from);return command(u.message);}return;}
+  if(!['group','supergroup','channel'].includes(m.chat.type))return;
+  await saveGroup(m.chat);
+  if(!(await isApprovedGroup(m.chat.id)))return;
+  if(u.message?.text&&(/^(?:\\/|\\.s(?:\\s|$))/i.test(u.message.text))){if(m.from)await saveUser(m.from);return command(u.message);}
+  if(u.channel_post)return channelPost(u.channel_post);
+  if(m.reply_to_message)return comment(m);
+ }
+ async function channelPost(p){if(!p?.chat||p.chat.type!=='channel'||!(await isApprovedGroup(p.chat.id)))return;const text=p.text||p.caption||'';if(!text.toLowerCase().includes(cfg.mentionTag.toLowerCase()))return;await Giveaway.findOneAndUpdate({channelId:String(p.chat.id),channelPostId:p.message_id},{$setOnInsert:{channelId:String(p.chat.id),channelPostId:p.message_id,title:text.slice(0,120),status:'active',winnerCount:1,durationSeconds:cfg.rollDurationSeconds,createdAt:new Date()}},{upsert:true,new:true});}
  function extractChannelOrigin(msg){
   const r=msg?.reply_to_message;
   if(!r)return null;
@@ -349,21 +362,33 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(!['group','supergroup'].includes(m.chat?.type)||!m.from?.id)return false;
   try{const x=await bot.getChatMember(m.chat.id,m.from.id);return ['administrator','creator'].includes(x.status);}catch{return false;}
  }
- async function requireApprovedGroup(m){
-  if(!['group','supergroup'].includes(m.chat?.type))return false;
-  const group=await Group.findOne({id:String(m.chat.id)}).select('approved').lean();
-  if(group?.approved===true)return true;
-  await bot.sendMessage(m.chat.id,'⛔ <b>GROUP NOT APPROVED</b>\\n\\nThis group must be approved by the bot owner before using giveaway commands.',{parse_mode:'HTML',reply_to_message_id:m.message_id}).catch(()=>{});
-  return false;
- }
- async function command(m){const parts=(m.text||'').trim().split(/\s+/);const cmd=(parts[0]||'').split('@')[0].toLowerCase();
-  if(cmd==='/start')return bot.sendMessage(m.chat.id,'🎟️ <b>CMT PICKER V2 PRO</b>\n━━━━━━━━━━━━━━━━━━\n\n🎁 <b>Giveaway Picker</b>\n⭐ <b>Paid Star Picker</b>\n🔄 <b>Reroll & Winner History</b>\n🛡️ <b>Secure Admin Controls</b>\n\n━━━━━━━━━━━━━━━━━━\n✅ <i>System ready for secure winner selection.</i>',{parse_mode:'HTML'});
-  if(cmd==='/approve'){
-   if(!await owner(m.from?.id))return bot.sendMessage(m.chat.id,'⛔ <b>OWNER ONLY</b>',{parse_mode:'HTML'});
-   if(!['group','supergroup'].includes(m.chat.type))return bot.sendMessage(m.chat.id,'Reply to /approve inside the group you want to approve.',{reply_to_message_id:m.message_id});
-   await Group.updateOne({id:String(m.chat.id)},{$set:{approved:true,title:m.chat.title||'',type:m.chat.type,username:m.chat.username||''}},{upsert:true});
-   return bot.sendMessage(m.chat.id,'✅ Group approved for giveaway commands.',{reply_to_message_id:m.message_id});
+ async function requireApprovedGroup(m){return ['group','supergroup','channel'].includes(m.chat?.type)&&await isApprovedGroup(m.chat.id);}
+ async function resolveApprovalTarget(m,arg){if(arg){const raw=String(arg).trim();return /^-?\\d+$/.test(raw)?raw:null;}if(['group','supergroup'].includes(m.chat?.type))return String(m.chat.id);return null;}
+ async function command(m){const parts=(m.text||'').trim().split(/\\s+/);const cmd=(parts[0]||'').split('@')[0].toLowerCase();
+  if(cmd==='/approve'||cmd==='/approvec'){
+   if(!await owner(m.from?.id))return;
+   const target=await resolveApprovalTarget(m,parts[1]);if(!target)return bot.sendMessage(m.chat.id,'Usage: /approvec (inside a group) or /approvec <code>GROUP_ID</code>',{parse_mode:'HTML'});
+   let chat=m.chat;if(String(m.chat.id)!==target){try{chat=await bot.getChat(target);}catch{return bot.sendMessage(m.chat.id,'❌ Group/chat not found or the bot cannot access it.');}}
+   if(!['group','supergroup','channel'].includes(chat.type))return bot.sendMessage(m.chat.id,'❌ Only groups, supergroups, and channels can be approved.');
+   await Group.updateOne({id:target},{$set:{approved:true,title:chat.title||'',type:chat.type,username:chat.username||'',lastSeenAt:new Date()}},{upsert:true});
+   return bot.sendMessage(m.chat.id,'✅ Approved: <b>'+esc(chat.title||target)+'</b>\\n🆔 <code>'+esc(target)+'</code>',{parse_mode:'HTML'});
   }
+  if(cmd==='/unapprove'){
+   if(!await owner(m.from?.id))return;
+   const target=await resolveApprovalTarget(m,parts[1]);if(!target)return bot.sendMessage(m.chat.id,'Usage: /unapprove (inside a group) or /unapprove <code>GROUP_ID</code>',{parse_mode:'HTML'});
+   const changed=await Group.updateOne({id:target},{$set:{approved:false}});
+   if(!changed.matchedCount&&!changed.upsertedCount)return bot.sendMessage(m.chat.id,'ℹ️ This group was not registered.');
+   return bot.sendMessage(m.chat.id,'🚫 Unapproved: <code>'+esc(target)+'</code>',{parse_mode:'HTML'});
+  }
+  if(cmd==='/approvegclist'){
+   if(!await owner(m.from?.id))return;
+   const groups=await Group.find({approved:true}).sort({title:1}).limit(100).lean();
+   if(!groups.length)return bot.sendMessage(m.chat.id,'📋 No approved groups or channels yet.');
+   const lines=groups.map((g,i)=>(i+1)+'. <b>'+esc(g.title||'Untitled')+'</b>\\n   <code>'+esc(g.id)+'</code> · '+esc(g.type||'unknown')).join('\\n');
+   return bot.sendMessage(m.chat.id,'📋 <b>APPROVED GROUP / CHANNEL LIST</b>\\n━━━━━━━━━━━━━━━━━━\\n'+lines+'\\n\\nShowing '+groups.length+' (max 100).',{parse_mode:'HTML'});
+  }
+  if(m.chat.type!=='private'&&!(await requireApprovedGroup(m)))return;
+  if(cmd==='/start')return bot.sendMessage(m.chat.id,'🎟️ <b>CMT PICKER V2 PRO</b>\\n━━━━━━━━━━━━━━━━━━\\n\\n🎁 <b>Giveaway Picker</b>\\n⭐ <b>Paid Star Picker</b>\\n🔄 <b>Reroll & Winner History</b>\\n🛡️ <b>Secure Admin Controls</b>\\n\\n━━━━━━━━━━━━━━━━━━\\n✅ <i>System ready for secure winner selection.</i>',{parse_mode:'HTML'});
   if(cmd==='/admin'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ <b>OWNER ONLY</b>\n\nYou do not have permission to use this command.');const [u,g,w,e]=await Promise.all([User.countDocuments(),Group.countDocuments(),Giveaway.countDocuments(),Entry.countDocuments()]);return bot.sendMessage(m.chat.id,'<b>V2 PRO DASHBOARD</b>\n\n👤 Users: <b>'+u+'</b>\n👥 Groups: <b>'+g+'</b>\n🎁 Giveaways: <b>'+w+'</b>\n💬 Entries: <b>'+e+'</b>\n\n/status - system health',{parse_mode:'HTML'});}
   if(cmd==='/status'){if(!await owner(m.from.id))return bot.sendMessage(m.chat.id,'⛔ <b>OWNER ONLY</b>\n\nYou do not have permission to use this command.');return bot.sendMessage(m.chat.id,'🟢 <b>V2 Pro Online</b>\nUptime: '+Math.floor(process.uptime())+'s\nMongo: '+(mongoose.connection.readyState===1?'connected':'disconnected')+'\nNode: '+process.version,{parse_mode:'HTML'});}  if(cmd==='/giveaway')return createGiveaway(m,parts[1],parts.slice(2).join(' '));
   if(cmd==='/pickwinner')return pick(m,parts[1]);
