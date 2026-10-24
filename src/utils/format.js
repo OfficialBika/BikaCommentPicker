@@ -17,7 +17,8 @@ function paginate(items,page=1,pageSize=10){
  return {items:items.slice((currentPage-1)*safeSize,currentPage*safeSize),page:currentPage,totalPages,totalItems:items.length,pageSize:safeSize};
 }
 function normalizeMessageText(value){
- return String(value??'').replace(/\\\\n/g,'\n').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+ const text=String(value??'');
+ return text.replace(/\\\\n/g,'\n').replace(/\\r\\n/g,'\n').replace(/\\r/g,'\n').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
 }
 function formatMessage(lines,{maxBlankLines=1}={}){
  const input=Array.isArray(lines)?lines:[lines];
