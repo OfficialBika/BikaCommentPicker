@@ -7,7 +7,8 @@ This file documents the isolated V2 Pro development line. The V1 main branch rem
 ## Goals
 - Safe multi-giveaway lifecycle
 - Configurable entry rules
-- Atomic/locked winner picking
+- Atomic/locked winner picking and guarded rerolls
+- Telegram webhook secret-token verification
 - Reroll and winner history
 - Rate-limit aware broadcast queue
 - Better observability and configuration
@@ -23,7 +24,7 @@ This file documents the isolated V2 Pro development line. The V1 main branch rem
 - /starstatus — inspect tracked Paid Star users, Star counts, MTProto sync, and webhook reaction health
 - /starsync — manually sync the channel post's Paid Star leaderboard into MongoDB
 - /reroll [count]
-- /winnerlist [page]
+- /winnerlist [giveawayId] (current winners; pagination remains a future improvement)
 - /giveaway (guided setup)
 
 ## Safety
