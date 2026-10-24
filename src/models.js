@@ -30,16 +30,18 @@ async function repairLegacyGroupIndexes({logger = console} = {}) {
  const collection = mongoose.connection.collection('groupchats');
  const indexes = await collection.indexes();
  const legacy = indexes.filter(index =>
-  index.name === 'groupChatId_1' &&
   index.unique === true &&
   index.key &&
   Object.keys(index.key).length === 1 &&
-  index.key.groupChatId === 1
+  index.key.groupChatId === 1 &&
+  index.name === 'groupChatId_1'
  );
  for (const index of legacy) {
   await collection.dropIndex(index.name);
   logger.warn('Dropped obsolete unique groupchats index', {index: index.name});
  }
+ // Avoid deleting any records. Ensure the actual schema key has its index;
+ // existing data must be inspected before removing any other legacy unique index.
  await Group.createIndexes();
 }
 
