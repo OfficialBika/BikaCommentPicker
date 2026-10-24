@@ -5,7 +5,8 @@ Production-focused Telegram giveaway/comment picker.
 This file documents the isolated V2 Pro development line. The V1 main branch remains untouched.
 
 ## Goals
-- Safe multi-giveaway lifecycle with exact comment-thread-to-post mapping\n- One immutable first comment per user per giveaway post, based on earliest Telegram message ID
+- Safe multi-giveaway lifecycle with exact comment-thread-to-post mapping
+- One immutable first comment per user per giveaway post, based on earliest Telegram message ID
 - Configurable entry rules
 - Atomic/locked winner picking and guarded rerolls
 - Telegram webhook secret-token verification
