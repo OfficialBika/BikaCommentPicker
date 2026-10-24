@@ -406,11 +406,8 @@ function hasPaidReaction(reactions){return Array.isArray(reactions)&&reactions.s
   if(cmd==='/unapprove'){
    if(!await owner(m.from?.id))return;
    const target=await resolveApprovalTarget(m,parts[1]);if(!target)return;
-   const changed=await Group.updateOne({id:target},{$set:{approved:false}});
-   if(m.chat.type==='private'){
-    if(!changed.matchedCount&&!changed.upsertedCount)return bot.sendMessage(m.chat.id,'ℹ️ This group was not registered.');
-    return bot.sendMessage(m.chat.id,'🚫 Unapproved: <code>'+esc(target)+'</code>',{parse_mode:'HTML'});
-   }
+   await Group.updateOne({id:target},{$set:{approved:false}},{upsert:true});
+   if(m.chat.type==='private')return bot.sendMessage(m.chat.id,'🚫 Unapproved: <code>'+esc(target)+'</code>',{parse_mode:'HTML'});
    return;
   }
   if(cmd==='/approvegclist'){
