@@ -300,10 +300,10 @@ async function rememberCommentMessage(giveaway,msg){
   const r=m.reply_to_message;
   if(!r)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY SETUP</b>\n\nReply to the forwarded channel post.\n\nUsage: <code>/giveaway 3 keyword</code>',{parse_mode:'HTML',reply_to_message_id:m.message_id});
   const origin=extractChannelOrigin(m);
-  if(!origin)return bot.sendMessage(m.chat.id,'❌ <b>INVALID GIVEAWAY POST</b>\n\nReply directly to the forwarded channel post in its discussion group.');
+  if(!origin)return bot.sendMessage(m.chat.id,'❌ <b>INVALID GIVEAWAY POST</b>\n\nReply directly to the forwarded channel post in its discussion group.',{parse_mode:'HTML',reply_to_message_id:m.message_id});
   const postId=origin.channelPostId,channelId=origin.channelId,rawCount=Number(countArg||1);
-  if(!Number.isInteger(rawCount)||rawCount<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.');
-  if(rawCount>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per giveaway is '+cfg.pickCountMax+'.');
+  if(!Number.isInteger(rawCount)||rawCount<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.',{reply_to_message_id:m.message_id});
+  if(rawCount>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per giveaway is '+cfg.pickCountMax+'.',{reply_to_message_id:m.message_id});
   const count=rawCount;
   const g=await Giveaway.findOneAndUpdate({channelId,channelPostId:postId},{$set:{discussionChatId:String(m.chat.id),discussionRootMessageId:Number(r.message_id),winnerCount:count,rules:{keyword:keyword||undefined,requireUsername:false,requireBotStart:false,excludeAdmins:true}},$setOnInsert:{title:(r.text||r.caption||'Giveaway').slice(0,120),status:'active',durationSeconds:cfg.rollDurationSeconds,createdBy:String(m.from.id),createdAt:new Date()}},{upsert:true,new:true});
   await rememberCommentMessage(g,r);
