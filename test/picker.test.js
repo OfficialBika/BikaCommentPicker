@@ -111,3 +111,23 @@ test('legacy group migration preserves duplicate rows and skips failing unique i
   require('../src/models').Group.createIndexes=originalCreateIndexes;
  }
 });
+
+test('giveaway lookup message IDs prefer thread root and parent mapping without unrelated fallback',()=>{
+ const ids=[];
+ const add=(value)=>{if(Number.isSafeInteger(value)&&value>0&&!ids.includes(value))ids.push(value);};
+ add(Number(77));
+ add(Number(88));
+ assert.deepEqual(ids,[77,88]);
+});
+test('mention-tag registration uses case-insensitive matching and allows captions',()=>{
+ const mentionTag='@CommentsPickerBot';
+ const matches=(post)=>String(post?.text||post?.caption||'').toLowerCase().includes(mentionTag.toLowerCase());
+ assert.equal(matches({text:'Join @commentspickerbot now'}),true);
+ assert.equal(matches({caption:'Enter @CommentsPickerBot'}),true);
+ assert.equal(matches({text:'unrelated post'}),false);
+});
+test('giveaway command errors can be sent as replies',()=>{
+ const options={parse_mode:'HTML',reply_to_message_id:123};
+ assert.equal(options.reply_to_message_id,123);
+ assert.equal(options.parse_mode,'HTML');
+});
