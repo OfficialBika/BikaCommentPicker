@@ -35,19 +35,30 @@ async function repairLegacyGroupIndexes({logger = console} = {}) {
   if (error.codeName === 'NamespaceNotFound' || error.code === 26) indexes = [];
   else throw error;
  }
- const legacy = indexes.filter(index =>
-  index.unique === true &&
-  index.key &&
-  Object.keys(index.key).length === 1 &&
-  index.key.groupChatId === 1 &&
+ const legacyGroupChatIndex = indexes.find(index =>
+  index.unique === true && index.key &&
+  Object.keys(index.key).length === 1 && index.key.groupChatId === 1 &&
   index.name === 'groupChatId_1'
  );
- for (const index of legacy) {
-  await collection.dropIndex(index.name);
-  logger.warn('Dropped obsolete unique groupchats index', {index: index.name});
+ if (legacyGroupChatIndex) {
+  await collection.dropIndex(legacyGroupChatIndex.name);
+  logger.warn('Dropped obsolete unique groupchats index', {index: legacyGroupChatIndex.name});
  }
- // Avoid deleting any records. Ensure the actual schema key has its index;
- // existing data must be inspected before removing any other legacy unique index.
+
+ // Older bot versions may have stored group records under groupChatId.
+ // Backfill only records without the current id field; preserve approval and other metadata.
+ const backfill = await collection.updateMany(
+  {id: {$exists: false}, groupChatId: {$exists: true, $ne: null}},
+  [{$set: {id: {$toString: '$groupChatId'}}}]
+ );
+ if (backfill.modifiedCount > 0) logger.warn('Migrated legacy group identifiers', {modifiedCount: backfill.modifiedCount});
+
+ // Keep unidentifiable legacy records for manual inspection; never delete data automatically.
+ const orphanCount = await collection.countDocuments({
+  id: {$exists: false},
+  $or: [{groupChatId: {$exists: false}}, {groupChatId: null}]
+ });
+ if (orphanCount > 0) logger.warn('Legacy group records missing both id and groupChatId require review', {count: orphanCount});
  await Group.createIndexes();
 }
 
