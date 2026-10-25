@@ -1,7 +1,7 @@
 name: V2 Pro CI
 on:
   push:
-    branches: [v2-pro, v2-pro-hardening-2026-10-24, v2-pro-approved-groups-2026-10-24, v2-pro-production-hardening-2026-10-24, fix/v2-pro-mongodb-group-index-webhook-2026-10-25, fix/v2-pro-legacy-group-null-ids-2026-10-25]
+    branches: [v2-pro, v2-pro-hardening-2026-10-24, v2-pro-approved-groups-2026-10-24, v2-pro-production-hardening-2026-10-24, fix/v2-pro-mongodb-group-index-webhook-2026-10-25, fix/v2-pro-legacy-group-null-ids-2026-10-25, fix/v2-pro-partial-group-id-index-2026-10-25]
   pull_request:
     branches: [v2-pro]
 jobs:
