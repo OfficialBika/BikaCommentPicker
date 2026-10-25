@@ -83,22 +83,28 @@ test('custom emoji HTML markup remains intact in result templates',()=>{
 });
 const {repairLegacyGroupIndexes}=require('../src/models');
 
-test('legacy group index repair drops only the obsolete unique groupChatId index',async()=>{
+test('legacy group migration removes old index, backfills identifiers and reports orphans',async()=>{
  const calls=[];
  const legacy={name:'groupChatId_1',unique:true,key:{groupChatId:1}};
  const unrelated={name:'title_1',unique:true,key:{title:1}};
- const nonUnique={name:'groupChatId_1',unique:false,key:{groupChatId:1}};
+ const nonUnique={name:'other_groupChatId_1',unique:false,key:{groupChatId:1}};
  const originalCollection=require('mongoose').connection.collection;
  const originalCreateIndexes=require('../src/models').Group.createIndexes;
+ const updates=[];
  require('mongoose').connection.collection=()=>({
   indexes:async()=>[legacy,unrelated,nonUnique],
-  dropIndex:async name=>calls.push(['drop',name])
+  dropIndex:async name=>calls.push(['drop',name]),
+  updateMany:async(...args)=>{updates.push(args);return {modifiedCount:2};},
+  countDocuments:async filter=>{calls.push(['count',filter]);return 1;}
  });
  require('../src/models').Group.createIndexes=async()=>calls.push(['createIndexes']);
  try{
   await repairLegacyGroupIndexes({logger:{warn:(...args)=>calls.push(['warn',...args])}});
   assert.deepEqual(calls.filter(c=>c[0]==='drop'),[['drop','groupChatId_1']]);
+  assert.equal(updates.length,1);
+  assert.deepEqual(updates[0][0],{id:{$exists:false},groupChatId:{$exists:true,$ne:null}});
   assert.equal(calls.some(c=>c[0]==='createIndexes'),true);
+  assert.equal(calls.some(c=>c[0]==='count'),true);
  }finally{
   require('mongoose').connection.collection=originalCollection;
   require('../src/models').Group.createIndexes=originalCreateIndexes;
