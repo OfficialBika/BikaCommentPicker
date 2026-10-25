@@ -296,8 +296,9 @@ async function rememberCommentMessage(giveaway,msg){
  async function createGiveaway(m,countArg,keyword){
   if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ <b>ADMIN ACCESS REQUIRED</b>\n\nOnly the group admin or bot owner can use this command.');
   if(!await requireApprovedGroup(m))return;
+  // This command is a primary user action; echo validation errors back in-chat.
   const r=m.reply_to_message;
-  if(!r)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY SETUP</b>\n\nReply to the forwarded channel post.\n\nUsage: <code>/giveaway 3 keyword</code>');
+  if(!r)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY SETUP</b>\n\nReply to the forwarded channel post.\n\nUsage: <code>/giveaway 3 keyword</code>',{parse_mode:'HTML',reply_to_message_id:m.message_id});
   const origin=extractChannelOrigin(m);
   if(!origin)return bot.sendMessage(m.chat.id,'❌ <b>INVALID GIVEAWAY POST</b>\n\nReply directly to the forwarded channel post in its discussion group.');
   const postId=origin.channelPostId,channelId=origin.channelId,rawCount=Number(countArg||1);
