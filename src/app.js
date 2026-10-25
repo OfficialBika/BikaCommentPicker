@@ -14,9 +14,9 @@ const {createPaidStarClient,syncPaidStarReactors,paidStarMtStatus}=require('./se
 async function start(){
  const cfg=loadConfig();const logger=createLogger(cfg.logLevel);
  await mongoose.connect(cfg.mongoUri,{serverSelectionTimeoutMS:10000});
- await repairLegacyGroupIndexes({logger});
+ const groupIndexStatus=await repairLegacyGroupIndexes({logger});
  await Promise.all([Entry.createIndexes(),CommentMessage.createIndexes()]);
- logger.info('MongoDB connected; model indexes ready');
+ logger.info('MongoDB connected; model indexes ready',{groupIndexReady:groupIndexStatus.indexReady,duplicateGroupIds:groupIndexStatus.duplicateIds});
  await cleanupTemporaryGiveawayData({retentionDays:cfg.tempDataRetentionDays,logger}).catch(e=>logger.warn('Initial temporary-data cleanup failed: '+(e.message||e)));
  const cleanupTimer=setInterval(()=>cleanupTemporaryGiveawayData({retentionDays:cfg.tempDataRetentionDays,logger}).catch(e=>logger.warn('Scheduled temporary-data cleanup failed: '+(e.message||e))),cfg.cleanupIntervalMinutes*60*1000);
  cleanupTimer.unref?.();
