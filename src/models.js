@@ -30,47 +30,59 @@ commentMessageSchema.index({giveawayId:1,createdAt:1});
 async function repairLegacyGroupIndexes({logger = console} = {}) {
  const collection = mongoose.connection.collection('groupchats');
  let indexes;
- try { indexes = await collection.indexes(); }
- catch (error) {
-  // First deployment into a newly-created collection can report NamespaceNotFound.
+ try {
+  indexes = await collection.indexes();
+ } catch (error) {
   if (error.codeName === 'NamespaceNotFound' || error.code === 26) indexes = [];
   else throw error;
  }
- const legacyGroupChatIndex = indexes.find(index =>
-  index.unique === true && index.key &&
-  Object.keys(index.key).length === 1 && index.key.groupChatId === 1 &&
-  index.name === 'groupChatId_1'
- );
- if (legacyGroupChatIndex) {
-  await collection.dropIndex(legacyGroupChatIndex.name);
-  logger.warn('Dropped obsolete unique groupchats index', {index: legacyGroupChatIndex.name});
- }
- const ordinaryIdIndex = indexes.find(index =>
-  index.unique === true && index.key &&
-  Object.keys(index.key).length === 1 && index.key.id === 1 &&
-  index.name === 'id_1' &&
-  !index.partialFilterExpression
- );
- if (ordinaryIdIndex) {
-  await collection.dropIndex(ordinaryIdIndex.name);
-  logger.warn('Replaced ordinary unique group id index with partial unique index', {index: ordinaryIdIndex.name});
+
+ // Retire only the two known single-field unique indexes that conflict with
+ // legacy rows. Preserve all group documents and their approval metadata.
+ for (const index of indexes) {
+  const isLegacyKey = index.unique === true &&
+   index.key && Object.keys(index.key).length === 1;
+  const obsoleteGroupChatId = isLegacyKey &&
+   index.name === 'groupChatId_1' && index.key.groupChatId === 1;
+  const obsoleteOrdinaryId = isLegacyKey &&
+   index.name === 'id_1' && index.key.id === 1 &&
+   !index.partialFilterExpression;
+  if (obsoleteGroupChatId || obsoleteOrdinaryId) {
+   await collection.dropIndex(index.name);
+   logger.warn('Dropped obsolete groupchats unique index', {index:index.name});
+  }
  }
 
- // Older bot versions may have stored group records under groupChatId.
- // Backfill only records without the current id field; preserve approval and other metadata.
+ // Restore any missing canonical ID from the old field. Do not overwrite
+ // existing IDs; do not merge or delete duplicate group records automatically.
  const backfill = await collection.updateMany(
-  {id: {$exists: false}, groupChatId: {$exists: true, $ne: null}},
-  [{$set: {id: {$toString: '$groupChatId'}}}]
+  {id: {$exists:false}, groupChatId: {$exists:true, $ne:null}},
+  [{$set:{id:{$toString:'$groupChatId'}}}]
  );
- if (backfill.modifiedCount > 0) logger.warn('Migrated legacy group identifiers', {modifiedCount: backfill.modifiedCount});
+ if (backfill.modifiedCount > 0) logger.warn('Migrated legacy group identifiers', {modifiedCount:backfill.modifiedCount});
 
- // Keep unidentifiable legacy records for manual inspection; never delete data automatically.
- const orphanCount = await collection.countDocuments({
-  id: {$exists: false},
-  $or: [{groupChatId: {$exists: false}}, {groupChatId: null}]
- });
- if (orphanCount > 0) logger.warn('Legacy group records missing both id and groupChatId require review', {count: orphanCount});
+ // The production collection contains legacy duplicates, so inspect conflicting
+ // string IDs before building the partial unique index. If duplicates exist,
+ // retain rows and let the application start; approval lookups are still keyed
+ // by id and will need explicit reconciliation of those duplicated records.
+ const duplicates = await collection.aggregate([
+  {$match:{id:{$type:'string'}}},
+  {$group:{_id:'$id', count:{$sum:1}}},
+  {$match:{count:{$gt:1}}},
+  {$limit:20}
+ ]).toArray();
+ if (duplicates.length) {
+  logger.error('Duplicate group IDs need manual reconciliation before unique index can be enforced', {
+   countAtLeast:duplicates.length,
+   sample:duplicates.map(row=>({id:row._id,count:row.count}))
+  });
+  // Keep the service available while preserving all rows. Do not request index
+  // creation here, because MongoDB would reject it and stop the whole process.
+  return {indexReady:false,duplicateIds:duplicates.length};
+ }
+
  await Group.createIndexes();
+ return {indexReady:true,duplicateIds:0};
 }
 
 const User=mongoose.model('UserV2',userSchema,'users');
