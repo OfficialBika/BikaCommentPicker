@@ -117,7 +117,20 @@ async function start(){
   if(u.channel_post)return channelPost(u.channel_post);
   if(m.reply_to_message)return comment(m);
  }
- async function channelPost(p){if(!p?.chat||p.chat.type!=='channel'||!(await isApprovedGroup(p.chat.id)))return;const text=p.text||p.caption||'';if(!text.toLowerCase().includes(cfg.mentionTag.toLowerCase()))return;await Giveaway.findOneAndUpdate({channelId:String(p.chat.id),channelPostId:p.message_id},{$setOnInsert:{channelId:String(p.chat.id),channelPostId:p.message_id,title:text.slice(0,120),status:'active',winnerCount:1,durationSeconds:cfg.rollDurationSeconds,createdAt:new Date()}},{upsert:true,new:true});}
+ async function channelPost(p){
+  if(!p?.chat||p.chat.type!=='channel')return;
+  // Posts carrying the configured bot tag are discovered only from channels
+  // approved by the owner; save the channel metadata first for clear diagnostics.
+  if(!(await isApprovedGroup(p.chat.id)))return;
+  const text=p.text||p.caption||'';
+  if(!text.toLowerCase().includes(cfg.mentionTag.toLowerCase()))return;
+  const g=await Giveaway.findOneAndUpdate(
+   {channelId:String(p.chat.id),channelPostId:p.message_id},
+   {$setOnInsert:{channelId:String(p.chat.id),channelPostId:p.message_id,title:text.slice(0,120),status:'active',winnerCount:1,durationSeconds:cfg.rollDurationSeconds,createdAt:new Date()}},
+   {upsert:true,new:true}
+  );
+  logger.info('Mention-tag giveaway post registered',{channelId:String(p.chat.id),channelPostId:p.message_id,giveawayId:String(g._id)});
+}
  function extractChannelOrigin(msg){
   const r=msg?.reply_to_message;if(!r)return null;const o=r.forward_origin;
   if(o?.type==='channel'&&o.chat?.id&&o.message_id)return {channelId:String(o.chat.id),channelPostId:Number(o.message_id)};
