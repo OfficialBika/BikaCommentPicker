@@ -117,7 +117,20 @@ async function start(){
   if(u.channel_post)return channelPost(u.channel_post);
   if(m.reply_to_message)return comment(m);
  }
- async function channelPost(p){if(!p?.chat||p.chat.type!=='channel'||!(await isApprovedGroup(p.chat.id)))return;const text=p.text||p.caption||'';if(!text.toLowerCase().includes(cfg.mentionTag.toLowerCase()))return;await Giveaway.findOneAndUpdate({channelId:String(p.chat.id),channelPostId:p.message_id},{$setOnInsert:{channelId:String(p.chat.id),channelPostId:p.message_id,title:text.slice(0,120),status:'active',winnerCount:1,durationSeconds:cfg.rollDurationSeconds,createdAt:new Date()}},{upsert:true,new:true});}
+ async function channelPost(p){
+  if(!p?.chat||p.chat.type!=='channel')return;
+  // Posts carrying the configured bot tag are discovered only from channels
+  // approved by the owner; save the channel metadata first for clear diagnostics.
+  if(!(await isApprovedGroup(p.chat.id)))return;
+  const text=p.text||p.caption||'';
+  if(!text.toLowerCase().includes(cfg.mentionTag.toLowerCase()))return;
+  const g=await Giveaway.findOneAndUpdate(
+   {channelId:String(p.chat.id),channelPostId:p.message_id},
+   {$setOnInsert:{channelId:String(p.chat.id),channelPostId:p.message_id,title:text.slice(0,120),status:'active',winnerCount:1,durationSeconds:cfg.rollDurationSeconds,createdAt:new Date()}},
+   {upsert:true,new:true}
+  );
+  logger.info('Mention-tag giveaway post registered',{channelId:String(p.chat.id),channelPostId:p.message_id,giveawayId:String(g._id)});
+}
  function extractChannelOrigin(msg){
   const r=msg?.reply_to_message;if(!r)return null;const o=r.forward_origin;
   if(o?.type==='channel'&&o.chat?.id&&o.message_id)return {channelId:String(o.chat.id),channelPostId:Number(o.message_id)};
@@ -127,23 +140,45 @@ async function start(){
   return null;
  }
  async function findGiveaway(msg,explicitId){
-  if(explicitId){const byId=await Giveaway.findById(explicitId).catch(()=>null);if(byId&&(!byId.discussionChatId||String(byId.discussionChatId)===String(msg.chat.id)))return byId;}
+  const chatId=msg?.chat?.id==null?null:String(msg.chat.id);
+  if(explicitId){
+   const byId=await Giveaway.findById(explicitId).catch(()=>null);
+   if(byId&&(!byId.discussionChatId||chatId===null||String(byId.discussionChatId)===chatId))return byId;
+  }
   const origin=extractChannelOrigin(msg);
   if(origin){
    const exact=await Giveaway.findOne({channelId:origin.channelId,channelPostId:origin.channelPostId}).sort({createdAt:-1});
    if(!exact)return null;
-   if(exact.discussionChatId&&String(exact.discussionChatId)!==String(msg.chat.id))return null;
-   if(!exact.discussionChatId&&['group','supergroup'].includes(msg.chat?.type)){exact.discussionChatId=String(msg.chat.id);await exact.save();}
+   if(exact.discussionChatId&&chatId!==null&&String(exact.discussionChatId)!==chatId)return null;
+   if(!exact.discussionChatId&&['group','supergroup'].includes(msg.chat?.type)){exact.discussionChatId=chatId;await exact.save();}
    return exact;
   }
-  const parent=msg?.reply_to_message;if(!parent||msg.chat?.id==null)return null;
-  const groupChatId=String(msg.chat.id),threadId=Number(msg.message_thread_id);
-  if(Number.isSafeInteger(threadId)&&threadId>0){const link=await CommentMessage.findOne({groupChatId,messageId:threadId}).select('giveawayId').lean();if(link){const g=await Giveaway.findOne({_id:link.giveawayId,discussionChatId:groupChatId});if(g)return g;}}
-  const messageId=Number(parent.message_id);if(!Number.isSafeInteger(messageId)||messageId<1)return null;
-  const linked=await CommentMessage.findOne({groupChatId,messageId}).select('giveawayId').lean();
-  if(linked)return Giveaway.findOne({_id:linked.giveawayId,discussionChatId:groupChatId});
-  const legacy=await Entry.findOne({groupChatId,commentMessageId:messageId}).select('giveawayId').lean();
-  if(legacy)return Giveaway.findOne({_id:legacy.giveawayId,discussionChatId:groupChatId});
+  if(chatId===null)return null;
+  const groupChatId=chatId,parent=msg?.reply_to_message;
+  // A command may reply to a comment instead of the original channel post.
+  // Follow the stored mapping first, then legacy entries.
+  const messageIds=[];
+  const threadId=Number(msg.message_thread_id);
+  if(Number.isSafeInteger(threadId)&&threadId>0)messageIds.push(threadId);
+  const parentId=Number(parent?.message_id);
+  if(Number.isSafeInteger(parentId)&&parentId>0&&!messageIds.includes(parentId))messageIds.push(parentId);
+  for(const messageId of messageIds){
+   const link=await CommentMessage.findOne({groupChatId,messageId}).select('giveawayId').lean();
+   if(link){
+    const g=await Giveaway.findOne({_id:link.giveawayId,discussionChatId:groupChatId});
+    if(g)return g;
+   }
+   const legacy=await Entry.findOne({groupChatId,commentMessageId:messageId}).select('giveawayId').lean();
+   if(legacy){
+    const g=await Giveaway.findOne({_id:legacy.giveawayId,discussionChatId:groupChatId});
+    if(g)return g;
+   }
+  }
+  // When replying directly to the mapped root discussion message, use it.
+  if(parent&&Number.isSafeInteger(parentId)&&parentId>0){
+   const byRoot=await Giveaway.findOne({discussionChatId:groupChatId,discussionRootMessageId:parentId,status:{$in:['active','completed','picking']}}).sort({createdAt:-1});
+   if(byRoot)return byRoot;
+  }
   return null;
  }
  async function resolveCommentGiveaway(msg){
@@ -155,14 +190,17 @@ async function start(){
    if(!g.discussionChatId){g.discussionChatId=chatId;await g.save();}return g;
   }
   const threadId=Number(msg.message_thread_id);
-  if(Number.isSafeInteger(threadId)&&threadId>0){const link=await CommentMessage.findOne({groupChatId:chatId,messageId:threadId}).select('giveawayId').lean();if(link)return Giveaway.findOne({_id:link.giveawayId,discussionChatId:chatId});}
+  if(Number.isSafeInteger(threadId)&&threadId>0){
+   const link=await CommentMessage.findOne({groupChatId:chatId,messageId:threadId}).select('giveawayId').lean();
+   if(link){const g=await Giveaway.findOne({_id:link.giveawayId,discussionChatId:chatId});if(g)return g;}
+  }
   const parentId=Number(parent.message_id);if(!Number.isSafeInteger(parentId)||parentId<1)return null;
   const linked=await CommentMessage.findOne({groupChatId:chatId,messageId:parentId}).select('giveawayId').lean();
-  if(linked)return Giveaway.findOne({_id:linked.giveawayId,discussionChatId:chatId});
+  if(linked){const g=await Giveaway.findOne({_id:linked.giveawayId,discussionChatId:chatId});if(g)return g;}
   const legacy=await Entry.findOne({groupChatId:chatId,commentMessageId:parentId}).select('giveawayId').lean();
   return legacy?Giveaway.findOne({_id:legacy.giveawayId,discussionChatId:chatId}):null;
  }
- async function rememberCommentMessage(giveaway,msg){
+async function rememberCommentMessage(giveaway,msg){
   const groupChatId=String(msg.chat.id),messageId=Number(msg.message_id);
   if(!Number.isSafeInteger(messageId)||messageId<1)throw new Error('Invalid comment message ID.');
   const key={groupChatId,messageId};
@@ -258,15 +296,16 @@ async function start(){
  async function createGiveaway(m,countArg,keyword){
   if(!await admin(m))return bot.sendMessage(m.chat.id,'⛔ <b>ADMIN ACCESS REQUIRED</b>\n\nOnly the group admin or bot owner can use this command.');
   if(!await requireApprovedGroup(m))return;
+  // This command is a primary user action; echo validation errors back in-chat.
   const r=m.reply_to_message;
-  if(!r)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY SETUP</b>\n\nReply to the forwarded channel post.\n\nUsage: <code>/giveaway 3 keyword</code>');
+  if(!r)return bot.sendMessage(m.chat.id,'❌ <b>GIVEAWAY SETUP</b>\n\nReply to the forwarded channel post.\n\nUsage: <code>/giveaway 3 keyword</code>',{parse_mode:'HTML',reply_to_message_id:m.message_id});
   const origin=extractChannelOrigin(m);
-  if(!origin)return bot.sendMessage(m.chat.id,'❌ <b>INVALID GIVEAWAY POST</b>\n\nReply directly to the forwarded channel post in its discussion group.');
+  if(!origin)return bot.sendMessage(m.chat.id,'❌ <b>INVALID GIVEAWAY POST</b>\n\nReply directly to the forwarded channel post in its discussion group.',{parse_mode:'HTML',reply_to_message_id:m.message_id});
   const postId=origin.channelPostId,channelId=origin.channelId,rawCount=Number(countArg||1);
-  if(!Number.isInteger(rawCount)||rawCount<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.');
-  if(rawCount>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per giveaway is '+cfg.pickCountMax+'.');
+  if(!Number.isInteger(rawCount)||rawCount<1)return bot.sendMessage(m.chat.id,'❌ Winner count must be a whole number greater than 0.',{reply_to_message_id:m.message_id});
+  if(rawCount>cfg.pickCountMax)return bot.sendMessage(m.chat.id,'❌ Maximum winners per giveaway is '+cfg.pickCountMax+'.',{reply_to_message_id:m.message_id});
   const count=rawCount;
-  const g=await Giveaway.findOneAndUpdate({channelId,channelPostId:postId},{$set:{discussionChatId:String(m.chat.id),winnerCount:count,rules:{keyword:keyword||undefined,requireUsername:false,requireBotStart:false,excludeAdmins:true}},$setOnInsert:{title:(r.text||r.caption||'Giveaway').slice(0,120),status:'active',durationSeconds:cfg.rollDurationSeconds,createdBy:String(m.from.id),createdAt:new Date()}},{upsert:true,new:true});
+  const g=await Giveaway.findOneAndUpdate({channelId,channelPostId:postId},{$set:{discussionChatId:String(m.chat.id),discussionRootMessageId:Number(r.message_id),winnerCount:count,rules:{keyword:keyword||undefined,requireUsername:false,requireBotStart:false,excludeAdmins:true}},$setOnInsert:{title:(r.text||r.caption||'Giveaway').slice(0,120),status:'active',durationSeconds:cfg.rollDurationSeconds,createdBy:String(m.from.id),createdAt:new Date()}},{upsert:true,new:true});
   await rememberCommentMessage(g,r);
   const text=formatMessage([
    customEmoji('5188344996356448758','🎁')+' <b>GIVEAWAY CONFIGURED</b>',
