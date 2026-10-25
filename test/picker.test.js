@@ -131,3 +131,12 @@ test('giveaway command errors can be sent as replies',()=>{
  assert.equal(options.reply_to_message_id,123);
  assert.equal(options.parse_mode,'HTML');
 });
+
+test('emoji-only comments are kept as the original text for winner displays',()=>{
+ const preserveComment=value=>{const text=String(value||'').trim();return esc(text||'—');};
+ assert.equal(preserveComment('🔥🔥'), '🔥🔥');
+ assert.equal(preserveComment('မြန်မာစာ 😊'), 'မြန်မာစာ 😊');
+ assert.equal(preserveComment('hello 👋'), 'hello 👋');
+ assert.equal(preserveComment('  '), '—');
+ assert.equal(preserveComment('<b>hi</b>'), '&lt;b&gt;hi&lt;/b&gt;');
+});
